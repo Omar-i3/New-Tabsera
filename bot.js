@@ -897,7 +897,7 @@ document.addEventListener('DOMContentLoaded', () => {
             msgWrapper.className = 'group flex justify-end items-center gap-1.5 my-2';
             const encoded = encodeURIComponent(text);
             const imageHtml = imageUrl
-                ? `<div class="mb-2 max-w-sm rounded-xl overflow-hidden border border-emerald-400/40 shadow-sm bg-slate-900"><img src="${imageUrl}" alt="صورة المستخدم" class="max-h-60 w-auto rounded-lg object-contain"></div>`
+                ? `<div class="mb-2 max-w-sm rounded-xl overflow-hidden border border-emerald-400/40 shadow-sm bg-slate-900 cursor-pointer hover:opacity-90 transition" onclick="openImageLightbox('${imageUrl}')"><img src="${imageUrl}" alt="صورة المستخدم" class="max-h-60 w-auto rounded-lg object-contain"></div>`
                 : '';
 
             msgWrapper.innerHTML = `
@@ -1993,7 +1993,8 @@ function speakLiveVoiceResponse(text) {
         .replace(/[#*`_~]/g, '')
         .trim();
         
-    if (transcriptEl) transcriptEl.textContent = cleanText.substring(0, 150) + (cleanText.length > 150 ? '...' : '');
+    // الصوت فقط بدلاً من عرض النص في وضع المحادثة الصوتية الحية
+    if (transcriptEl) transcriptEl.textContent = '🔊 المساعد يتحدث معك الآن...';
     
     if (!window.speechSynthesis) {
         setTimeout(startLiveListening, 2000);
@@ -2036,3 +2037,21 @@ function speakLiveVoiceResponse(text) {
         trySetVoiceAndSpeak();
     }
 }
+
+// 🖼️ فتح وإغلاق نافذة عرض وتكبير الصور (Lightbox Modal)
+window.openImageLightbox = function (imageUrl) {
+    const modal = document.getElementById('image-lightbox-modal');
+    const img = document.getElementById('lightbox-img');
+    if (modal && img) {
+        img.src = imageUrl;
+        modal.classList.remove('hidden');
+    }
+};
+
+window.closeImageLightbox = function () {
+    const modal = document.getElementById('image-lightbox-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+};
+
