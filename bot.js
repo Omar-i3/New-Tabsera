@@ -1897,7 +1897,7 @@ function startLiveListening() {
                     try { liveVoiceRecognition.stop(); } catch(e) {}
                     processLiveVoiceQuery(finalTranscript + interimTranscript);
                 }
-            }, 2000); // 2 seconds of silence triggers send
+            }, 1000); // 1 second of silence triggers immediate send
         }
     };
     

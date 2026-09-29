@@ -315,13 +315,13 @@
     }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 flex h-[100dvh] overflow-hidden">
+<body class="bg-slate-950 text-slate-100 flex min-h-screen h-[100dvh] w-full overflow-hidden">
 
   <!-- طبقة التظليل للشاشات الصغيرة -->
   <div id="sidebar-overlay" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-20 hidden md:hidden"></div>
 
   <!-- 🎙️ شاشة وضع المكالمة الحية (Live Voice Mode Overlay) -->
-  <div id="live-voice-overlay" class="fixed inset-0 bg-slate-950/95 backdrop-blur-xl z-50 flex flex-col items-center justify-between py-16 hidden opacity-0 transition-opacity duration-300">
+  <div id="live-voice-overlay" class="fixed inset-0 w-full h-full bg-slate-950/95 backdrop-blur-xl z-50 flex flex-col items-center justify-between py-12 px-4 hidden opacity-0 transition-opacity duration-300">
     <div class="text-center space-y-3">
       <h2 class="text-emerald-400 font-bold text-xl tracking-wide" data-i18n="chat.liveModeTitle">وضع المحادثة الحية</h2>
       <p id="live-voice-status" class="text-slate-400 text-sm animate-pulse" data-i18n="chat.liveModeListening">جاري الاستماع...</p>
