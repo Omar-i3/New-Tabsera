@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <!-- أيقونة الموقع والتطبيق المحدثة -->
+  <link rel="icon" type="image/png" href="bot-logo.png?v=2">
+  <link rel="apple-touch-icon" href="bot-logo.png?v=2">
+    <!-- إعدادات تطبيق PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#020617">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="تبصرة">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تبصرة - مساعدك الشرعي الرقمي</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Cairo, Amiri, Tajawal -->
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Cairo:wght@400;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Marked.js for Markdown parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Firebase Web SDK (Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    body { font-family: 'Cairo', sans-serif; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+    /* تنسيق نصوص الردود (Markdown Prose) */
+    .prose-chat {
+      line-height: 1.8;
+      word-break: break-word;
+    }
+    .prose-chat p {
+      margin-bottom: 0.75rem;
+    }
+    .prose-chat p:last-child {
+      margin-bottom: 0;
+    }
+    .prose-chat ul {
+      list-style-type: disc;
+      margin-inline-start: 1.25rem;
+      margin-top: 0.35rem;
+      margin-bottom: 0.75rem;
+    }
+    .prose-chat ol {
+      list-style-type: decimal;
+      margin-inline-start: 1.25rem;
+      margin-top: 0.35rem;
+      margin-bottom: 0.75rem;
+    }
+    .prose-chat li {
+      margin-bottom: 0.35rem;
+    }
+    .prose-chat h1, .prose-chat h2, .prose-chat h3, .prose-chat h4 {
+      color: #f8fafc;
+      font-weight: 700;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    .prose-chat h3 {
+      font-size: 0.95rem;
+      color: #34d399;
+    }
+    .prose-chat blockquote {
+      border-inline-start: 3px solid #10b981;
+      padding: 0.5rem 0.85rem;
+      background: rgba(16, 185, 129, 0.07);
+      border-radius: 0 0.5rem 0.5rem 0;
+      margin: 0.6rem 0;
+      color: #cbd5e1;
+      font-style: normal;
+    }
+    [dir="ltr"] .prose-chat blockquote {
+      border-radius: 0.5rem 0 0 0.5rem;
+    }
+    .prose-chat strong {
+      color: #f1f5f9;
+      font-weight: 700;
+    }
+    .prose-chat hr {
+      border-color: #334155;
+      margin: 0.75rem 0;
+    }
+    .prose-chat code {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.35rem;
+      font-size: 0.85em;
+      color: #38bdf8;
+    }
+
+    /* دعم اتجاه LTR — تبديل المواقع الثابتة */
+    [dir="ltr"] #sidebar {
+      right: auto;
+      left: 0;
+      border-left: none;
+      border-right: 1px solid rgb(30 41 59);
+      transform: translateX(-100%);
+    }
+    [dir="ltr"] #sidebar.translate-x-full {
+      transform: translateX(-100%) !important;
+    }
+    @media (min-width: 768px) {
+      [dir="ltr"] #sidebar {
+        transform: translateX(0) !important;
+      }
+    }
+    [dir="ltr"] #sidebar.sidebar-open {
+      transform: translateX(0) !important;
+    }
+
+    /* بطاقات الأحاديث والآيات وعناصر الاستيضاح */
+    .hadith-card {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      border-radius: 0.85rem;
+      padding: 0.85rem 1rem;
+      margin: 0.75rem 0;
+      position: relative;
+    }
+    .hadith-badge-sahih {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+    .hadith-badge-hasan {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+    .hadith-badge-daif {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+    .hadith-badge-muttafaq {
+      background: rgba(139, 92, 246, 0.15);
+      color: #a78bfa;
+      border: 1px solid rgba(139, 92, 246, 0.35);
+    }
+    .quran-verse-box {
+      background: linear-gradient(135deg, rgba(6, 78, 59, 0.2) 0%, rgba(15, 23, 42, 0.5) 100%);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-inline-start: 4px solid #10b981;
+      border-radius: 0.75rem;
+      padding: 0.85rem 1rem;
+      margin: 0.75rem 0;
+      font-family: 'Amiri', serif;
+      font-size: 1.05rem;
+      line-height: 1.9;
+      color: #ecfdf5;
+      text-align: center;
+    }
+    .clarify-container {
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px dashed rgba(16, 185, 129, 0.3);
+      border-radius: 0.85rem;
+      padding: 0.75rem;
+      margin-top: 0.75rem;
+    }
+    .clarify-chip {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #6ee7b7;
+      padding: 0.4rem 0.75rem;
+      border-radius: 0.65rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .clarify-chip:hover {
+      background: #059669;
+      color: #ffffff;
+      border-color: #059669;
+      transform: translateY(-1px);
+    }
+
+    /* أحجام خطوط المحادثة الديناميكية */
+    :root {
+      --chat-font-size: 0.9375rem;
+      --chat-line-height: 1.75;
+    }
+
+    #chat-messages .user-msg-bubble,
+    #chat-messages .bot-msg-bubble,
+    #chat-messages .prose-chat,
+    #chat-messages .prose-chat p,
+    #chat-messages .prose-chat li {
+      font-size: var(--chat-font-size, 0.9375rem);
+      line-height: var(--chat-line-height, 1.75);
+    }
+
+    #chat-messages[data-font-size="small"],
+    #chat-messages[data-font-size="small"] .user-msg-bubble,
+    #chat-messages[data-font-size="small"] .bot-msg-bubble,
+    #chat-messages[data-font-size="small"] .prose-chat,
+    #chat-messages[data-font-size="small"] .prose-chat p,
+    #chat-messages[data-font-size="small"] .prose-chat li {
+      font-size: 0.8125rem !important;
+      line-height: 1.6 !important;
+    }
+
+    #chat-messages[data-font-size="medium"],
+    #chat-messages[data-font-size="medium"] .user-msg-bubble,
+    #chat-messages[data-font-size="medium"] .bot-msg-bubble,
+    #chat-messages[data-font-size="medium"] .prose-chat,
+    #chat-messages[data-font-size="medium"] .prose-chat p,
+    #chat-messages[data-font-size="medium"] .prose-chat li {
+      font-size: 0.9375rem !important;
+      line-height: 1.75 !important;
+    }
+
+    #chat-messages[data-font-size="large"],
+    #chat-messages[data-font-size="large"] .user-msg-bubble,
+    #chat-messages[data-font-size="large"] .bot-msg-bubble,
+    #chat-messages[data-font-size="large"] .prose-chat,
+    #chat-messages[data-font-size="large"] .prose-chat p,
+    #chat-messages[data-font-size="large"] .prose-chat li {
+      font-size: 1.125rem !important;
+      line-height: 1.95 !important;
+    }
+
+    #chat-messages[data-font-size="small"] .hadith-card .font-\[\'Amiri\'\] { font-size: 0.95rem !important; }
+    #chat-messages[data-font-size="large"] .hadith-card .font-\[\'Amiri\'\] { font-size: 1.25rem !important; }
+    #chat-messages[data-font-size="small"] .quran-verse-box { font-size: 0.95rem !important; }
+    #chat-messages[data-font-size="large"] .quran-verse-box { font-size: 1.25rem !important; }
+
+    /* أنماط الوسائط المتعددة (Multimodal UI) */
+    @keyframes voice-recording-pulse {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+      }
+      50% {
+        transform: scale(1.08);
+        box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+      }
+    }
+    .recording-active {
+      animation: voice-recording-pulse 1.4s infinite ease-in-out !important;
+      background-color: #ef4444 !important;
+      color: #ffffff !important;
+      border-color: #f87171 !important;
+    }
+    .speaking-active {
+      color: #34d399 !important;
+      animation: pulse 1.2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 flex h-[100dvh] overflow-hidden">
+
+  <!-- طبقة التظليل للشاشات الصغيرة -->
+  <div id="sidebar-overlay" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-20 hidden md:hidden"></div>
+
+  <!-- 1️⃣ القائمة الجانبية (Sidebar) -->
+  <aside id="sidebar" class="fixed md:static right-0 top-0 h-full w-64 bg-slate-900 border-l border-slate-800 flex flex-col justify-between transition-transform duration-300 z-30 translate-x-full md:translate-x-0">
+    <div class="p-4 space-y-4">
+      <!-- شعار التطبيق -->
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-emerald-600/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+            <i data-lucide="moon" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h1 class="font-bold text-sm text-slate-100 leading-tight" data-i18n="app.name">تبصرة</h1>
+            <span class="text-[10px] text-emerald-400 font-semibold block" data-i18n="app.subtitle">مساعدك الشرعي الرقمي</span>
+          </div>
+        </div>
+        <button id="close-sidebar-btn" class="md:hidden text-slate-400 hover:text-slate-100 p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- زر محادثة جديدة -->
+      <button id="new-chat-btn" class="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white py-2 px-4 rounded-xl text-sm font-medium transition shadow-md">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span data-i18n="sidebar.newChat">محادثة جديدة</span>
+      </button>
+
+      <!-- سجل المحادثات السابقة -->
+      <div class="space-y-1 pt-1">
+        <p class="text-[11px] font-semibold text-slate-500 px-2" data-i18n="sidebar.recentChats">المحادثات الأخيرة</p>
+        <div id="history-list" class="space-y-1 overflow-y-auto max-h-[calc(100vh-250px)]"></div>
+      </div>
+    </div>
+
+    <!-- أسفل القائمة الجانبية (بطاقة الحساب مع الترس المباشر) -->
+    <div id="user-profile-card" onclick="handleProfileCardClick(event)" class="p-3 border-t border-slate-800/80 bg-slate-900/60 flex items-center justify-between cursor-pointer hover:bg-slate-800/80 transition group">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div id="user-avatar" class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 font-bold text-xs shrink-0 overflow-hidden border border-slate-700 group-hover:border-emerald-500/50 transition">👤</div>
+        <div class="truncate">
+          <p id="user-name" class="text-xs font-semibold text-slate-200 truncate" data-i18n="sidebar.visitor">زائر</p>
+          <p id="user-status" class="text-[10px] text-slate-400 truncate" data-i18n="sidebar.notRegistered">غير مسجّل</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <!-- ⚙️ زر الترس المباشر -->
+        <button type="button" onclick="event.stopPropagation(); openAccountModal()" class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition shadow-sm" data-i18n-title="settings.account.settingsTooltip" title="إعدادات الحساب">
+          <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+        </button>
+        <button id="auth-btn" class="text-xs bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white px-2.5 py-1 rounded-lg transition font-medium" data-i18n="sidebar.login">دخول</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 2️⃣ منطقة المحادثة الرئيسية (Main Content) -->
+  <main class="flex-1 flex flex-col h-full relative bg-slate-950">
+    <header class="h-12 border-b border-slate-800/60 flex items-center justify-between px-4 bg-slate-950/80 backdrop-blur-md sticky top-0 z-10">
+      <div class="flex items-center gap-2">
+        <button id="toggle-sidebar-btn" class="p-1.5 text-slate-400 hover:text-slate-100 rounded-lg transition">
+          <i data-lucide="panel-right" class="w-5 h-5"></i>
+        </button>
+        <span class="font-bold text-slate-200 text-sm" data-i18n="header.title">مساعد تبصرة الرقمي</span>
+      </div>
+      <span class="text-[11px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span data-i18n="header.active">نشط الآن</span>
+      </span>
+    </header>
+
+    <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 max-w-3xl mx-auto w-full"></div>
+
+    <!-- ⬇️ زر النزول التلقائي لأسفل المحادثة -->
+    <button id="scroll-bottom-btn" type="button" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-20 bg-slate-900/95 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-slate-700/80 px-3.5 py-1.5 rounded-full shadow-2xl transition-all duration-300 opacity-0 pointer-events-none flex items-center gap-1.5 text-xs backdrop-blur-md" title="الانتقال إلى أحدث رد">
+      <i data-lucide="arrow-down" class="w-3.5 h-3.5 text-emerald-400 animate-bounce"></i>
+      <span data-i18n="chat.latestMessages">أحدث الرسائل</span>
+    </button>
+
+    <!-- الحاوية الخاصة بصندوق الشات -->
+    <div class="p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-slate-950 via-slate-950 to-transparent">
+      <div class="max-w-2xl mx-auto">
+        <form id="chat-form" class="bg-slate-900 border border-slate-800 focus-within:border-emerald-500/50 rounded-2xl p-2.5 shadow-lg transition-all">
+          <!-- حاوية معاينة الصورة المرفقة قبل الإرسال -->
+          <div id="image-preview-container" class="hidden mb-2 p-1.5 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="relative w-12 h-12 rounded-lg overflow-hidden border border-emerald-500/30 shrink-0 bg-slate-900">
+                <img id="image-preview-img" src="" alt="المعاينة" class="w-full h-full object-cover">
+              </div>
+              <div class="min-w-0">
+                <p id="image-preview-name" class="text-xs text-slate-200 font-medium truncate max-w-[180px] sm:max-w-xs">صورة مرفقة</p>
+                <p id="image-preview-size" class="text-[10px] text-emerald-400">جاهزة للتحليل الشرعي</p>
+              </div>
+            </div>
+            <button type="button" id="remove-image-btn" onclick="clearSelectedImage()" class="p-1 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition" title="إلغاء الصورة">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <!-- شريط حالة الاستماع الصوتي -->
+          <div id="voice-recording-status" class="hidden mb-2 p-2 bg-red-950/40 rounded-xl border border-red-500/30 flex items-center justify-between text-xs text-red-300">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></span>
+              <span id="voice-status-text" data-i18n="chat.voiceListening">جاري الاستماع... تحدّث الآن</span>
+            </div>
+            <button type="button" onclick="stopVoiceRecording()" class="text-xs text-red-400 hover:text-red-300 underline font-medium" data-i18n="chat.voiceStop">إيقاف</button>
+          </div>
+
+          <textarea id="chat-input" rows="1" placeholder="اكتب سؤالك الشرعي هنا..." data-i18n-placeholder="chat.placeholder" class="w-full bg-transparent text-slate-100 placeholder-slate-500 resize-none px-3 py-1.5 focus:outline-none text-sm max-h-32"></textarea>
+          
+          <div class="flex items-center justify-between border-t border-slate-800/50 pt-2 px-1 mt-1">
+            <!-- ⚖️ محدد نمط الإجابة: مفصّل / موجز -->
+            <div class="flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-xl border border-slate-800/80 text-[11px]">
+              <button type="button" id="mode-detailed-btn" class="px-2.5 py-1 rounded-lg font-medium transition flex items-center gap-1.5 bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 shadow-sm" title="إجابة مفصلة بالأدلة وتخريج الأحاديث">
+                <i data-lucide="book-open" class="w-3 h-3"></i>
+                <span data-i18n="chat.modeDetailed">مفصّل بالأدلة</span>
+              </button>
+              <button type="button" id="mode-concise-btn" class="px-2.5 py-1 rounded-lg font-medium transition flex items-center gap-1.5 text-slate-400 hover:text-slate-200 border border-transparent" title="إجابة سريعة وموجزة للحكم المباشر">
+                <i data-lucide="zap" class="w-3 h-3"></i>
+                <span data-i18n="chat.modeConcise">موجز وسريع</span>
+              </button>
+            </div>
+
+            <!-- أزرار المدخلات متعددة الوسائط والإرسال -->
+            <div class="flex items-center gap-1.5">
+              <!-- مدخل رفع الصور المخفي -->
+              <input type="file" id="image-file-input" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden">
+              
+              <!-- زر إرفاق الصورة -->
+              <button type="button" id="attach-image-btn" onclick="document.getElementById('image-file-input').click()" class="p-2 text-slate-400 hover:text-emerald-400 hover:bg-slate-800/80 rounded-xl transition border border-transparent hover:border-slate-700" data-i18n-title="chat.attachImage" title="إرفاق صورة للتحليل الشرعي">
+                <i data-lucide="image" class="w-4 h-4"></i>
+              </button>
+
+              <!-- زر الرسالة الصوتية (Speech-to-Text) -->
+              <button type="button" id="voice-record-btn" onclick="toggleVoiceRecording()" class="p-2 text-slate-400 hover:text-emerald-400 hover:bg-slate-800/80 rounded-xl transition border border-transparent hover:border-slate-700" data-i18n-title="chat.voiceRecord" title="تسجيل رسالة صوتية">
+                <i data-lucide="mic" class="w-4 h-4"></i>
+              </button>
+
+              <span class="text-[10px] text-slate-500 hidden sm:inline mr-1">DeepSeek Engine</span>
+
+              <!-- زر الإرسال -->
+              <button type="submit" id="send-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-xl transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed" data-i18n-title="chat.send" title="إرسال">
+                <i data-lucide="arrow-up" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        </form>
+        <p class="text-[10px] text-slate-600 text-center mt-1.5" data-i18n="chat.disclaimer">مساعد تبصرة يقدم استشارات وإجابات بناءً على المصادر الشرعية، يرجى التثبت في الفتاوى المعقدة.</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- 3️⃣ نافذة إعدادات تبصرة المكتملة (Full Settings Modal) -->
+  <div id="account-modal" style="display: none;" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <!-- Header -->
+      <div class="p-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/90">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-emerald-600/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+            <i data-lucide="settings" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-100 text-sm" data-i18n="settings.title">إعدادات تبصرة</h3>
+            <p class="text-[10px] text-slate-400" data-i18n="settings.subtitle">تخصيص الحساب، المظهر، والمحادثات</p>
+          </div>
+        </div>
+        <button onclick="closeAccountModal()" class="text-slate-400 hover:text-slate-100 p-1.5 rounded-lg hover:bg-slate-800 transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Settings Tabs Header -->
+      <div class="flex items-center gap-1 border-b border-slate-800/80 px-3 bg-slate-950/40 overflow-x-auto">
+        <button type="button" onclick="switchSettingsTab('account')" id="tab-btn-account" class="settings-tab-btn py-2.5 px-3 text-xs font-semibold text-emerald-400 border-b-2 border-emerald-500 flex items-center gap-1.5 shrink-0 transition">
+          <i data-lucide="user" class="w-3.5 h-3.5"></i>
+          <span data-i18n="settings.tabs.account">الحساب</span>
+        </button>
+        <button type="button" onclick="switchSettingsTab('ai')" id="tab-btn-ai" class="settings-tab-btn py-2.5 px-3 text-xs font-semibold text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center gap-1.5 shrink-0 transition">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+          <span data-i18n="settings.tabs.ai">الذكاء الشرعي</span>
+        </button>
+        <button type="button" onclick="switchSettingsTab('appearance')" id="tab-btn-appearance" class="settings-tab-btn py-2.5 px-3 text-xs font-semibold text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center gap-1.5 shrink-0 transition">
+          <i data-lucide="palette" class="w-3.5 h-3.5"></i>
+          <span data-i18n="settings.tabs.appearance">المظهر والخط</span>
+        </button>
+        <button type="button" onclick="switchSettingsTab('chat')" id="tab-btn-chat" class="settings-tab-btn py-2.5 px-3 text-xs font-semibold text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center gap-1.5 shrink-0 transition">
+          <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+          <span data-i18n="settings.tabs.chat">المحادثة</span>
+        </button>
+        <button type="button" onclick="switchSettingsTab('data')" id="tab-btn-data" class="settings-tab-btn py-2.5 px-3 text-xs font-semibold text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center gap-1.5 shrink-0 transition">
+          <i data-lucide="database" class="w-3.5 h-3.5"></i>
+          <span data-i18n="settings.tabs.data">البيانات</span>
+        </button>
+        <button type="button" onclick="switchSettingsTab('about')" id="tab-btn-about" class="settings-tab-btn py-2.5 px-3 text-xs font-semibold text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center gap-1.5 shrink-0 transition">
+          <i data-lucide="info" class="w-3.5 h-3.5"></i>
+          <span data-i18n="settings.tabs.about">عن تبصرة</span>
+        </button>
+      </div>
+
+      <!-- Tab Contents (Scrollable) -->
+      <div class="p-5 overflow-y-auto space-y-5 flex-1">
+        <!-- 1️⃣ تبويب الحساب -->
+        <div id="settings-tab-account" class="settings-tab-content space-y-4">
+          <div class="flex items-center gap-3 p-3 bg-slate-950/60 rounded-2xl border border-slate-800">
+            <div id="modal-user-avatar" class="w-12 h-12 rounded-full bg-slate-800 border-2 border-emerald-500/40 flex items-center justify-center text-slate-300 font-bold text-lg overflow-hidden shrink-0">👤</div>
+            <div class="min-w-0 flex-1">
+              <p id="modal-user-name-display" class="font-bold text-slate-100 text-sm truncate" data-i18n="sidebar.visitor">زائر</p>
+              <p id="modal-user-email" class="text-xs text-slate-400 truncate" data-i18n="settings.account.notRegisteredGoogle">غير مسجّل بحساب Google</p>
+            </div>
+            <div id="modal-auth-action-container">
+              <button id="modal-login-btn" onclick="handleAuthAction()" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl transition font-medium" data-i18n="sidebar.login">دخول</button>
+            </div>
+          </div>
+
+          <div id="logged-in-profile-section" class="space-y-3 hidden">
+            <div class="space-y-1.5">
+              <label class="text-xs font-medium text-slate-300 block" data-i18n="settings.account.editName">تعديل الاسم المعروض</label>
+              <input type="text" id="modal-display-name-input" class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none transition" placeholder="أدخل اسمك..." data-i18n-placeholder="settings.account.namePlaceholder">
+            </div>
+            <button id="save-account-changes-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-md">
+              <i data-lucide="check" class="w-4 h-4"></i>
+              <span data-i18n="settings.account.saveName">حفظ الاسم</span>
+            </button>
+            <button id="modal-logout-btn" class="w-full bg-red-600/10 hover:bg-red-600/20 text-red-400 border border-red-500/30 font-medium py-2 rounded-xl text-xs transition flex items-center justify-center gap-1.5">
+              <i data-lucide="log-out" class="w-4 h-4"></i>
+              <span data-i18n="settings.account.logoutFull">تسجيل الخروج من الحساب</span>
+            </button>
+          </div>
+
+          <div class="p-3 bg-emerald-950/20 border border-emerald-500/20 rounded-xl text-xs text-emerald-300 leading-relaxed flex items-start gap-2">
+            <i data-lucide="cloud" class="w-4 h-4 shrink-0 mt-0.5 text-emerald-400"></i>
+            <span data-i18n="settings.account.cloudInfo">تسجيل الدخول بحساب Google يحفظ جميع محادثاتك واستشاراتك سحابياً لتصل إليها تلقائياً من أي هاتف أو جهاز آخر.</span>
+          </div>
+        </div>
+
+        <!-- 🧠 تبويب الذكاء الاصطناعي الشرعي -->
+        <div id="settings-tab-ai" class="settings-tab-content space-y-4 hidden">
+          <!-- المذهب الفقهي المعتمد -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-semibold text-slate-300 block" data-i18n="settings.ai.fiqhSchool">المذهب الفقهي المعتمد</label>
+              <span class="text-[10px] text-emerald-400 font-medium" id="current-fiqh-badge">الراجح بالدليل</span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <button type="button" onclick="setFiqhSchool('rajih')" id="btn-fiqh-rajih" class="fiqh-opt p-2.5 rounded-xl border border-emerald-500/40 bg-emerald-600/20 text-emerald-300 text-xs text-right transition font-medium">
+                <span data-i18n="settings.ai.schoolRajih">الراجح والدليل (افتراضي)</span>
+              </button>
+              <button type="button" onclick="setFiqhSchool('hanafi')" id="btn-fiqh-hanafi" class="fiqh-opt p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs text-right transition hover:border-slate-700">
+                <span data-i18n="settings.ai.schoolHanafi">المذهب الحنفي</span>
+              </button>
+              <button type="button" onclick="setFiqhSchool('maliki')" id="btn-fiqh-maliki" class="fiqh-opt p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs text-right transition hover:border-slate-700">
+                <span data-i18n="settings.ai.schoolMaliki">المذهب المالكي</span>
+              </button>
+              <button type="button" onclick="setFiqhSchool('shafii')" id="btn-fiqh-shafii" class="fiqh-opt p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs text-right transition hover:border-slate-700">
+                <span data-i18n="settings.ai.schoolShafii">المذهب الشافعي</span>
+              </button>
+              <button type="button" onclick="setFiqhSchool('hanbali')" id="btn-fiqh-hanbali" class="fiqh-opt p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs text-right transition hover:border-slate-700">
+                <span data-i18n="settings.ai.schoolHanbali">المذهب الحنبلي</span>
+              </button>
+              <button type="button" onclick="setFiqhSchool('comparative')" id="btn-fiqh-comparative" class="fiqh-opt p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs text-right transition hover:border-slate-700">
+                <span data-i18n="settings.ai.schoolComparative">مقارنة المذاهب الأربعة</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- عمق الإجابة ونمط المساعد -->
+          <div class="space-y-2">
+            <label class="text-xs font-semibold text-slate-300 block" data-i18n="settings.ai.personaTitle">عمق الإجابة ونمط المساعد</label>
+            <div class="space-y-2">
+              <button type="button" onclick="setAiPersona('easy')" id="btn-persona-easy" class="ai-persona-opt w-full p-2.5 rounded-xl border border-emerald-500/40 bg-emerald-600/20 text-emerald-300 text-right transition">
+                <p class="font-bold text-xs flex items-center gap-1.5"><i data-lucide="zap" class="w-3.5 h-3.5"></i> <span data-i18n="settings.ai.personaEasy">فتوى ميسرة للمسلم المعاصر</span></p>
+                <p class="text-[10px] text-slate-400 mt-0.5" data-i18n="settings.ai.personaEasyDesc">إجابة مباشرة وسهلة بلغة واضحة وخطوات عملية</p>
+              </button>
+              <button type="button" onclick="setAiPersona('scholar')" id="btn-persona-scholar" class="ai-persona-opt w-full p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-right transition hover:border-slate-700">
+                <p class="font-bold text-xs flex items-center gap-1.5"><i data-lucide="graduation-cap" class="w-3.5 h-3.5"></i> <span data-i18n="settings.ai.personaScholar">طالب علم وباحث مؤصل</span></p>
+                <p class="text-[10px] text-slate-500 mt-0.5" data-i18n="settings.ai.personaScholarDesc">أدلة تفصيلية، أصول فقه، ونصوص التراث والترجيح</p>
+              </button>
+              <button type="button" onclick="setAiPersona('tarbiyah')" id="btn-persona-tarbiyah" class="ai-persona-opt w-full p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-right transition hover:border-slate-700">
+                <p class="font-bold text-xs flex items-center gap-1.5"><i data-lucide="heart" class="w-3.5 h-3.5"></i> <span data-i18n="settings.ai.personaTarbiyah">موعظة وتزكية قلبية</span></p>
+                <p class="text-[10px] text-slate-500 mt-0.5" data-i18n="settings.ai.personaTarbiyahDesc">تركيز على الجانب الإيماني والرقائق ومقاصد الشريعة</p>
+              </button>
+            </div>
+          </div>
+
+          <!-- مفاتيح التحكم الذكية -->
+          <div class="space-y-2 pt-1">
+            <!-- الاستيضاح الذكي -->
+            <div class="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between">
+              <div class="pr-2">
+                <p class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                  <i data-lucide="help-circle" class="w-3.5 h-3.5 text-emerald-400"></i>
+                  <span data-i18n="settings.ai.clarifyTitle">الاستيضاح الذكي في المسائل المشروطة</span>
+                </p>
+                <p class="text-[10px] text-slate-400 mt-0.5" data-i18n="settings.ai.clarifyDesc">طرح أسئلة استيضاحية إذا كان السؤال يحتمل تفاصيل مؤثرة في الفتوى</p>
+              </div>
+              <input type="checkbox" id="pref-clarify" checked onchange="toggleClarify(this.checked)" class="accent-emerald-500 w-4 h-4 cursor-pointer shrink-0">
+            </div>
+
+            <!-- تخريج الأحاديث -->
+            <div class="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between">
+              <div class="pr-2">
+                <p class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                  <i data-lucide="check-check" class="w-3.5 h-3.5 text-emerald-400"></i>
+                  <span data-i18n="settings.ai.hadithVerifyTitle">تخريج وتحقيق الأحاديث دائماً</span>
+                </p>
+                <p class="text-[10px] text-slate-400 mt-0.5" data-i18n="settings.ai.hadithVerifyDesc">إلزام المساعد بعزو الحديث وبيان صحته (صحيح، حسن، ضعيف...)</p>
+              </div>
+              <input type="checkbox" id="pref-hadith-verify" checked onchange="toggleHadithVerify(this.checked)" class="accent-emerald-500 w-4 h-4 cursor-pointer shrink-0">
+            </div>
+
+            <!-- عزو الآيات -->
+            <div class="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between">
+              <div class="pr-2">
+                <p class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                  <i data-lucide="bookmark" class="w-3.5 h-3.5 text-emerald-400"></i>
+                  <span data-i18n="settings.ai.quranCitationTitle">عزو وتأطير الآيات الكريمة</span>
+                </p>
+                <p class="text-[10px] text-slate-400 mt-0.5" data-i18n="settings.ai.quranCitationDesc">تأطير الآيات بالرسم القرآني مع ذكر اسم السورة ورقم الآية</p>
+              </div>
+              <input type="checkbox" id="pref-quran-citation" checked onchange="toggleQuranCitation(this.checked)" class="accent-emerald-500 w-4 h-4 cursor-pointer shrink-0">
+            </div>
+          </div>
+        </div>
+
+        <!-- 2️⃣ تبويب المظهر والخط -->
+        <div id="settings-tab-appearance" class="settings-tab-content space-y-4 hidden">
+          <!-- ألوان السمة -->
+          <div class="space-y-2">
+            <label class="text-xs font-semibold text-slate-300 block" data-i18n="settings.appearance.themeColor">لون السمة والتمييز</label>
+            <div class="grid grid-cols-5 gap-2">
+              <button type="button" onclick="changeThemeColor('emerald')" id="btn-theme-emerald" class="theme-color-btn py-2 px-1.5 rounded-xl border border-emerald-500 bg-emerald-950/40 text-emerald-300 text-[11px] font-bold flex flex-col items-center gap-1 transition">
+                <span class="w-4 h-4 rounded-full bg-emerald-500 shadow-sm"></span>
+                <span data-i18n="settings.appearance.emerald">زمردي</span>
+              </button>
+              <button type="button" onclick="changeThemeColor('gold')" id="btn-theme-gold" class="theme-color-btn py-2 px-1.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-[11px] font-medium flex flex-col items-center gap-1 transition hover:border-amber-500/40">
+                <span class="w-4 h-4 rounded-full bg-amber-500 shadow-sm"></span>
+                <span data-i18n="settings.appearance.gold">ذهبي</span>
+              </button>
+              <button type="button" onclick="changeThemeColor('sky')" id="btn-theme-sky" class="theme-color-btn py-2 px-1.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-[11px] font-medium flex flex-col items-center gap-1 transition hover:border-sky-500/40">
+                <span class="w-4 h-4 rounded-full bg-sky-500 shadow-sm"></span>
+                <span data-i18n="settings.appearance.sky">سماوي</span>
+              </button>
+              <button type="button" onclick="changeThemeColor('purple')" id="btn-theme-purple" class="theme-color-btn py-2 px-1.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-[11px] font-medium flex flex-col items-center gap-1 transition hover:border-purple-500/40">
+                <span class="w-4 h-4 rounded-full bg-purple-500 shadow-sm"></span>
+                <span data-i18n="settings.appearance.purple">بنفسجي</span>
+              </button>
+              <button type="button" onclick="changeThemeColor('rose')" id="btn-theme-rose" class="theme-color-btn py-2 px-1.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-[11px] font-medium flex flex-col items-center gap-1 transition hover:border-rose-500/40">
+                <span class="w-4 h-4 rounded-full bg-rose-500 shadow-sm"></span>
+                <span data-i18n="settings.appearance.rose">ياقوتي</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- حجم الخط -->
+          <div class="space-y-2">
+            <label class="text-xs font-semibold text-slate-300 block" data-i18n="settings.appearance.fontSize">حجم خط المحادثات</label>
+            <div class="grid grid-cols-3 gap-2">
+              <button type="button" onclick="changeFontSize('small')" id="btn-font-small" class="font-size-opt py-2 px-3 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs font-medium hover:border-emerald-500/50 transition" data-i18n="settings.appearance.fontSmall">صغير</button>
+              <button type="button" onclick="changeFontSize('medium')" id="btn-font-medium" class="font-size-opt py-2 px-3 rounded-xl border border-emerald-500/40 bg-emerald-600/20 text-emerald-300 text-xs font-medium transition" data-i18n="settings.appearance.fontMedium">قياسي</button>
+              <button type="button" onclick="changeFontSize('large')" id="btn-font-large" class="font-size-opt py-2 px-3 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs font-medium hover:border-emerald-500/50 transition" data-i18n="settings.appearance.fontLarge">كبير</button>
+            </div>
+          </div>
+
+          <!-- نوع الخط العربي -->
+          <div class="space-y-2">
+            <label class="text-xs font-semibold text-slate-300 block" data-i18n="settings.appearance.fontFamily">نوع الخط العربي</label>
+            <div class="space-y-1.5">
+              <button type="button" onclick="changeFontFamily('cairo')" id="btn-font-cairo" class="font-fam-opt w-full flex items-center justify-between p-2.5 rounded-xl border border-emerald-500/40 bg-emerald-600/15 text-emerald-300 text-xs transition">
+                <span class="font-['Cairo']" data-i18n="settings.appearance.cairo">خط كايرو (عصري - الافتراضي)</span>
+                <i data-lucide="check" class="w-4 h-4 check-icon"></i>
+              </button>
+              <button type="button" onclick="changeFontFamily('amiri')" id="btn-font-amiri" class="font-fam-opt w-full flex items-center justify-between p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs transition hover:border-slate-700">
+                <span class="font-['Amiri'] text-sm" data-i18n="settings.appearance.amiri">خط أميري (أصالة ونصوص شرعية)</span>
+              </button>
+              <button type="button" onclick="changeFontFamily('tajawal')" id="btn-font-tajawal" class="font-fam-opt w-full flex items-center justify-between p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs transition hover:border-slate-700">
+                <span class="font-['Tajawal']" data-i18n="settings.appearance.tajawal">خط تجوال (ناعم وحديث)</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- سواد OLED -->
+          <div class="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between">
+            <div>
+              <p class="text-xs font-semibold text-slate-200" data-i18n="settings.appearance.oled">سواد فاحم لشاشات OLED</p>
+              <p class="text-[10px] text-slate-400" data-i18n="settings.appearance.oledDesc">خلفية سوداء بالكامل لتوفير البطارية وإبراز النصوص</p>
+            </div>
+            <input type="checkbox" id="pref-oled-black" onchange="toggleOledBlack(this.checked)" class="accent-emerald-500 w-4 h-4 cursor-pointer">
+          </div>
+
+          <!-- 🌍 اختيار لغة الواجهة -->
+          <div class="space-y-2">
+            <label class="text-xs font-semibold text-slate-300 block" data-i18n="settings.appearance.language">لغة الواجهة</label>
+            <div class="grid grid-cols-3 gap-2">
+              <button type="button" onclick="setAppLanguage('ar')" id="btn-lang-ar" class="lang-opt py-2 px-2 rounded-xl border border-emerald-500/40 bg-emerald-600/20 text-emerald-300 text-[11px] font-bold flex flex-col items-center gap-1 transition shadow-sm">
+                <span>🇸🇦</span>
+                <span>العربية</span>
+              </button>
+              <button type="button" onclick="setAppLanguage('en')" id="btn-lang-en" class="lang-opt py-2 px-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-[11px] font-medium flex flex-col items-center gap-1 transition hover:border-slate-700">
+                <span>🇬🇧</span>
+                <span>English</span>
+              </button>
+              <button type="button" onclick="setAppLanguage('fr')" id="btn-lang-fr" class="lang-opt py-2 px-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-[11px] font-medium flex flex-col items-center gap-1 transition hover:border-slate-700">
+                <span>🇫🇷</span>
+                <span>Français</span>
+              </button>
+              <button type="button" onclick="setAppLanguage('tr')" id="btn-lang-tr" class="lang-opt py-2 px-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-[11px] font-medium flex flex-col items-center gap-1 transition hover:border-slate-700">
+                <span>🇹🇷</span>
+                <span>Türkçe</span>
+              </button>
+              <button type="button" onclick="setAppLanguage('ur')" id="btn-lang-ur" class="lang-opt py-2 px-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-[11px] font-medium flex flex-col items-center gap-1 transition hover:border-slate-700">
+                <span>🇵🇰</span>
+                <span>اردو</span>
+              </button>
+              <button type="button" onclick="setAppLanguage('id')" id="btn-lang-id" class="lang-opt py-2 px-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-[11px] font-medium flex flex-col items-center gap-1 transition hover:border-slate-700">
+                <span>🇮🇩</span>
+                <span>Indonesia</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3️⃣ تبويب المحادثة -->
+        <div id="settings-tab-chat" class="settings-tab-content space-y-4 hidden">
+          <div class="space-y-2">
+            <label class="text-xs font-semibold text-slate-300 block" data-i18n="settings.chat.defaultMode">نمط الإجابة الشرعية الافتراضي</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" onclick="setDefaultMode('detailed')" id="btn-defmode-detailed" class="def-mode-opt p-2.5 rounded-xl border border-emerald-500/40 bg-emerald-600/20 text-emerald-300 text-xs text-right transition">
+                <p class="font-bold flex items-center gap-1.5"><i data-lucide="book-open" class="w-3.5 h-3.5"></i> <span data-i18n="settings.chat.detailed">مفصّل بالأدلة</span></p>
+                <p class="text-[10px] text-slate-400 mt-1" data-i18n="settings.chat.detailedDesc">تخريج، أدلة، وأقوال العلماء</p>
+              </button>
+              <button type="button" onclick="setDefaultMode('concise')" id="btn-defmode-concise" class="def-mode-opt p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs text-right transition hover:border-slate-700">
+                <p class="font-bold flex items-center gap-1.5"><i data-lucide="zap" class="w-3.5 h-3.5"></i> <span data-i18n="settings.chat.concise">موجز وسريع</span></p>
+                <p class="text-[10px] text-slate-500 mt-1" data-i18n="settings.chat.conciseDesc">الحكم المباشر بنقاط واضحة</p>
+              </button>
+            </div>
+          </div>
+
+          <!-- الصلاة على النبي ﷺ دائماً -->
+          <div class="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between">
+            <div>
+              <p class="text-xs font-semibold text-slate-200" data-i18n="settings.chat.salawat">الصلاة على النبي ﷺ والافتتاح بالسلام</p>
+              <p class="text-[10px] text-slate-400" data-i18n="settings.chat.salawatDesc">تضمين الصلاة على رسول الله ﷺ في بداية الإجابات</p>
+            </div>
+            <input type="checkbox" id="pref-salawat" checked onchange="toggleSalawat(this.checked)" class="accent-emerald-500 w-4 h-4 cursor-pointer">
+          </div>
+
+          <!-- الإرسال بمفتاح Enter -->
+          <div class="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between">
+            <div>
+              <p class="text-xs font-semibold text-slate-200" data-i18n="settings.chat.enterSend">الإرسال بمفتاح Enter</p>
+              <p class="text-[10px] text-slate-400" data-i18n="settings.chat.enterSendDesc">إرسال مباشر بـ Enter والسطر الجديد بـ Shift+Enter</p>
+            </div>
+            <input type="checkbox" id="pref-enter-send" checked onchange="toggleEnterSend(this.checked)" class="accent-emerald-500 w-4 h-4 cursor-pointer">
+          </div>
+
+          <!-- نغمة تنبيه صوتية عند الرد -->
+          <div class="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between">
+            <div>
+              <p class="text-xs font-semibold text-slate-200" data-i18n="settings.chat.sound">صوت خفيف عند اكتمال الرد</p>
+              <p class="text-[10px] text-slate-400" data-i18n="settings.chat.soundDesc">إشعار صوتي ناعم يخبرك بانتهاء المساعد من الكتابة</p>
+            </div>
+            <input type="checkbox" id="pref-sound-notify" onchange="toggleSoundNotify(this.checked)" class="accent-emerald-500 w-4 h-4 cursor-pointer">
+          </div>
+        </div>
+
+        <!-- 4️⃣ تبويب البيانات والذاكرة -->
+        <div id="settings-tab-data" class="settings-tab-content space-y-4 hidden">
+          <div class="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between">
+            <div>
+              <p class="text-xs font-semibold text-slate-200" data-i18n="settings.data.savedChats">المحادثات المحفوظة</p>
+              <p id="settings-chats-count" class="text-[11px] text-slate-400">0 محادثة</p>
+            </div>
+            <button onclick="exportAllChats()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span data-i18n="settings.data.export">تصدير المحادثات</span>
+            </button>
+          </div>
+
+          <div class="p-3 bg-red-950/20 border border-red-500/20 rounded-xl flex items-center justify-between">
+            <div>
+              <p class="text-xs font-semibold text-red-300" data-i18n="settings.data.deleteTitle">مسح سجل المحادثات</p>
+              <p class="text-[10px] text-slate-400" data-i18n="settings.data.deleteDesc">حذف جميع الأسئلة والمحادثات السابقة نهائياً</p>
+            </div>
+            <button onclick="clearAllChatsConfirm()" class="text-xs bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 px-3 py-1.5 rounded-xl transition font-medium">
+              <span data-i18n="settings.data.deleteBtn">مسح الكل</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 5️⃣ تبويب عن تبصرة -->
+        <div id="settings-tab-about" class="settings-tab-content space-y-3 hidden text-center py-2">
+          <div class="w-14 h-14 rounded-2xl bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto shadow-lg">
+            <i data-lucide="moon" class="w-7 h-7"></i>
+          </div>
+          <div>
+            <h4 class="font-bold text-slate-100 text-base" data-i18n="settings.about.title">تبصرة - مساعدك الشرعي الرقمي</h4>
+            <span class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full inline-block mt-1" data-i18n="settings.about.version">الإصدار 2.5</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
+            <span data-i18n="settings.about.desc">منصة ذكاء اصطناعي إسلامية متخصصة في الإجابات الشرعية والفقهية والأسرية وفق منهج أهل السنة والجماعة، مدعومة بالأدلة الصحيحة وتخريج الأحاديث.</span>
+          </p>
+          <div class="pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-center gap-1">
+            <span data-i18n="settings.about.developer">تطوير وتصميم:</span>
+            <span class="text-emerald-400 font-bold" data-i18n="settings.about.developerName">عمر</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 📱 بنر تعليمات التثبيت المخصص للآيفون -->
+  <div id="ios-install-banner" class="hidden fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md bg-slate-900/95 border border-emerald-500/30 backdrop-blur-md rounded-2xl p-3 shadow-2xl text-slate-200">
+    <div class="flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5">
+        <span class="text-xl shrink-0">🌙</span>
+        <div class="text-xs">
+          <p class="font-bold text-slate-100" data-i18n="ios.title">ثبّت تطبيق تبصرة على الآيفون 📲</p>
+          <p class="text-[11px] text-slate-400 mt-0.5 leading-relaxed" data-i18n="ios.desc">اضغط زر المشاركة 📤 ثم اختر (إضافة إلى الشاشة الرئيسية)</p>
+        </div>
+      </div>
+      <button onclick="document.getElementById('ios-install-banner').remove()" class="text-slate-500 hover:text-slate-300 p-1 text-sm font-bold shrink-0">✕</button>
+    </div>
+  </div>
+  <script src="i18n.js?v=2.6"></script>
+  <script src="bot.js?v=2.6"></script>
+</body>
+
+</html>
