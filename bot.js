@@ -744,30 +744,108 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({
                     model: "deepseek-chat",
                     messages: messagesPayload,
-                    stream: false
+                    stream: true
                 }),
                 signal: activeAbortController.signal
             });
 
-            if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+            if (!response.ok) {
+                const errText = await response.text().catch(() => response.status);
+                throw new Error('HTTP ' + response.status + ': ' + errText);
+            }
 
-            const data = await response.json();
-            let botResponse = data.choices[0].message.content;
-
+            // Stop loading bubble, start streaming bubble
             if (loadingDiv) loadingDiv.remove();
-            appendMessageUI(botResponse, 'bot');
 
-            // تشغيل صوت التنبيه إذا كان مفعلاً في الإعدادات
-            playNotifySoundIfEnabled();
+            const msgId = 'msg-' + Date.now();
+            const streamWrapper = document.createElement('div');
+            streamWrapper.className = 'flex gap-2.5 justify-start max-w-3xl my-2';
+            streamWrapper.id = msgId;
+            const botIconHtml = '<div class=\"w-7 h-7 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shrink-0 mt-0.5\"><i data-lucide=\"bot\" class=\"w-4 h-4\"></i></div>';
+            streamWrapper.innerHTML = botIconHtml + '<div class=\"bot-msg-bubble bg-slate-900 border border-slate-800 text-slate-200 px-4 py-3 rounded-2xl rounded-tr-none leading-relaxed shadow-sm w-full\"><div class=\"prose-chat\" id=\"stream-content-' + msgId + '\"></div><span id=\"stream-cursor-' + msgId + '\" style=\"display:inline-block;width:2px;height:1em;background:#34d399;border-radius:1px;vertical-align:middle;margin-right:2px;animation:tabsera-blink 1s step-end infinite\"></span></div>';
+            chatMessages.appendChild(streamWrapper);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            if (window.lucide) lucide.createIcons();
 
-            currentChatHistory.push({ role: "assistant", content: botResponse });
-            saveCurrentChat();
+            const streamContentEl = document.getElementById('stream-content-' + msgId);
+            const cursorEl = document.getElementById('stream-cursor-' + msgId);
+
+            // SSE streaming read loop
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let fullText = '';
+            let sseBuffer = '';
+            let lastRender = 0;
+            const THROTTLE = 40;
 
             try {
-                await saveChatSession();
-            } catch (err) {
-                console.warn("حفظ الجلسة محلياً فقط بسبب الصلاحيات:", err);
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    sseBuffer += decoder.decode(value, { stream: true });
+                    const lines = sseBuffer.split('\n');
+                    sseBuffer = lines.pop() || '';
+                    for (const line of lines) {
+                        const t2 = line.trim();
+                        if (!t2.startsWith('data: ')) continue;
+                        const payload = t2.slice(6).trim();
+                        if (payload === '[DONE]') continue;
+                        try {
+                            const chunk = JSON.parse(payload);
+                            const delta = chunk?.choices?.[0]?.delta?.content;
+                            if (delta) {
+                                fullText += delta;
+                                const now = Date.now();
+                                if (now - lastRender > THROTTLE && streamContentEl) {
+                                    streamContentEl.textContent = fullText;
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                    lastRender = now;
+                                }
+                            }
+                        } catch (_) {}
+                    }
+                }
+            } catch (streamErr) {
+                // Unexpected EOF: stream ended — use what we have
+                console.warn('Stream read ended early, using collected text:', streamErr.message);
+                if (!fullText) throw streamErr;
+            } finally {
+                reader.cancel().catch(() => {});
             }
+
+            // Remove cursor, render full formatted response
+            if (cursorEl) cursorEl.remove();
+            if (streamContentEl) streamContentEl.innerHTML = formatText(fullText);
+
+            // Inject action toolbar
+            const bubbleDiv = streamWrapper.querySelector('.bot-msg-bubble');
+            if (bubbleDiv) {
+                const toolbar = document.createElement('div');
+                toolbar.className = 'flex items-center justify-between mt-2 pt-2 border-t border-slate-800/80 text-xs text-slate-400';
+                const copyLbl = typeof t === 'function' ? t('chat.copy') : 'نسخ';
+                const readLbl = typeof t === 'function' ? t('chat.readAloud') : 'استماع';
+                const waLbl = typeof t === 'function' ? t('chat.whatsapp') : 'واتساب';
+                const regenLbl = typeof t === 'function' ? t('chat.regenerate') : 'إعادة';
+                toolbar.innerHTML = '<div class=\"flex items-center gap-3\">' +
+                    '<button onclick=\"copyToClipboard(\'' + msgId + '\', this)\" class=\"hover:text-emerald-400 flex items-center gap-1 transition\"><i data-lucide=\"copy\" class=\"w-3.5 h-3.5\"></i><span>' + copyLbl + '</span></button>' +
+                    '<button onclick=\"speakMessageText(\'' + msgId + '\', this)\" class=\"tts-read-btn hover:text-emerald-400 flex items-center gap-1 transition\"><i data-lucide=\"volume-2\" class=\"w-3.5 h-3.5\"></i><span>' + readLbl + '</span></button>' +
+                    '<button onclick=\"shareWhatsApp(\'' + msgId + '\')\" class=\"hover:text-emerald-400 flex items-center gap-1 transition\"><i data-lucide=\"share-2\" class=\"w-3.5 h-3.5\"></i><span>' + waLbl + '</span></button>' +
+                    '<button onclick=\"regenerateLastResponse()\" class=\"hover:text-emerald-400 flex items-center gap-1 transition\"><i data-lucide=\"refresh-cw\" class=\"w-3.5 h-3.5\"></i><span>' + regenLbl + '</span></button>' +
+                    '</div>' +
+                    '<div class=\"flex items-center gap-1 border-r border-slate-800 pr-2 mr-1\">' +
+                    '<button onclick=\"rateResponse(this, \'like\')\" class=\"hover:text-emerald-400 p-1 rounded-md transition text-slate-400\"><i data-lucide=\"thumbs-up\" class=\"w-3.5 h-3.5\"></i></button>' +
+                    '<button onclick=\"rateResponse(this, \'dislike\')\" class=\"hover:text-red-400 p-1 rounded-md transition text-slate-400\"><i data-lucide=\"thumbs-down\" class=\"w-3.5 h-3.5\"></i></button>' +
+                    '</div>';
+                bubbleDiv.appendChild(toolbar);
+            }
+            streamWrapper.setAttribute('data-raw-text', fullText);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            if (window.lucide) lucide.createIcons();
+
+            playNotifySoundIfEnabled();
+            currentChatHistory.push({ role: "assistant", content: fullText });
+            saveCurrentChat();
+            try { await saveChatSession(); } catch (err) { console.warn("Session save:", err); }
 
         } catch (error) {
             if (loadingDiv) loadingDiv.remove();
