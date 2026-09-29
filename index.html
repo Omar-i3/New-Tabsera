@@ -320,6 +320,28 @@
   <!-- طبقة التظليل للشاشات الصغيرة -->
   <div id="sidebar-overlay" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-20 hidden md:hidden"></div>
 
+  <!-- 🎙️ شاشة وضع المكالمة الحية (Live Voice Mode Overlay) -->
+  <div id="live-voice-overlay" class="fixed inset-0 bg-slate-950/95 backdrop-blur-xl z-50 flex flex-col items-center justify-between py-16 hidden opacity-0 transition-opacity duration-300">
+    <div class="text-center space-y-3">
+      <h2 class="text-emerald-400 font-bold text-xl tracking-wide" data-i18n="chat.liveModeTitle">وضع المحادثة الحية</h2>
+      <p id="live-voice-status" class="text-slate-400 text-sm animate-pulse" data-i18n="chat.liveModeListening">جاري الاستماع...</p>
+    </div>
+    
+    <div class="relative flex items-center justify-center">
+      <div id="live-voice-orb" class="w-40 h-40 rounded-full orb-listening flex items-center justify-center shadow-2xl">
+        <i data-lucide="mic" class="w-12 h-12 text-white opacity-80" id="live-voice-icon"></i>
+      </div>
+    </div>
+    
+    <div class="flex flex-col items-center gap-6 w-full px-8">
+      <p id="live-voice-transcript" class="text-slate-300 text-center min-h-[3rem] text-lg max-w-md mx-auto"></p>
+      
+      <button onclick="stopLiveVoiceMode()" class="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] transition-transform hover:scale-110">
+        <i data-lucide="phone-off" class="w-6 h-6"></i>
+      </button>
+    </div>
+  </div>
+
   <!-- 1️⃣ القائمة الجانبية (Sidebar) -->
   <aside id="sidebar" class="fixed md:static right-0 top-0 h-full w-64 bg-slate-900 border-l border-slate-800 flex flex-col justify-between transition-transform duration-300 z-30 translate-x-full md:translate-x-0">
     <div class="p-4 space-y-4">
@@ -380,10 +402,16 @@
         </button>
         <span class="font-bold text-slate-200 text-sm" data-i18n="header.title">مساعد تبصرة الرقمي</span>
       </div>
-      <span class="text-[11px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-        <span data-i18n="header.active">نشط الآن</span>
-      </span>
+      <div class="flex items-center gap-2">
+        <button onclick="startLiveVoiceMode()" class="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1 rounded-full flex items-center gap-1.5 transition">
+          <i data-lucide="radio" class="w-3.5 h-3.5 text-emerald-400 animate-pulse"></i>
+          <span data-i18n="header.liveMode">مكالمة</span>
+        </button>
+        <span class="text-[11px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 hidden sm:flex">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span data-i18n="header.active">نشط الآن</span>
+        </span>
+      </div>
     </header>
 
     <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 max-w-3xl mx-auto w-full"></div>
@@ -440,8 +468,8 @@
 
             <!-- أزرار المدخلات متعددة الوسائط والإرسال -->
             <div class="flex items-center gap-1.5">
-              <!-- مدخل رفع الصور المخفي -->
-              <input type="file" id="image-file-input" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden">
+              <!-- مدخل رفع الصور أو التقاطها بالكاميرا المخفي -->
+              <input type="file" id="image-file-input" accept="image/png,image/jpeg,image/webp,image/gif" capture="environment" class="hidden">
               
               <!-- زر إرفاق الصورة -->
               <button type="button" id="attach-image-btn" onclick="document.getElementById('image-file-input').click()" class="p-2 text-slate-400 hover:text-emerald-400 hover:bg-slate-800/80 rounded-xl transition border border-transparent hover:border-slate-700" data-i18n-title="chat.attachImage" title="إرفاق صورة للتحليل الشرعي">
