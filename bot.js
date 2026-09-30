@@ -1786,11 +1786,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (iosBanner) iosBanner.classList.remove('hidden');
     }
 });
-// 🎙️ وضع المكالمة الحية (Live Voice Mode) - GPT/Gemini Live Style
+// 🎙️ وضع المحادثة الصوتية الفورية التفاعلية (Realtime Live Voice Mode with Sentence Streaming & Queue)
 let isLiveVoiceModeActive = false;
 let liveVoiceRecognition = null;
 let liveVoiceAbortController = null;
 let liveVoiceSilenceTimer = null;
+let isLiveVoiceMuted = false;
+let liveSpeechQueue = [];
+let isLiveSpeaking = false;
 
 window.startLiveVoiceMode = function () {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1800,23 +1803,30 @@ window.startLiveVoiceMode = function () {
     }
 
     isLiveVoiceModeActive = true;
+    isLiveVoiceMuted = false;
+    liveSpeechQueue = [];
+    isLiveSpeaking = false;
+
     const overlay = document.getElementById('live-voice-overlay');
     if (overlay) {
         overlay.classList.remove('hidden');
-        // Trigger reflow
         void overlay.offsetWidth;
         overlay.classList.remove('opacity-0');
     }
     
-    // Stop any existing TTS or normal recording
+    // إيقاف أي قراءة صوتية عادية أو تسجيل جاري
     if (window.speechSynthesis) window.speechSynthesis.cancel();
     if (typeof isVoiceRecording !== 'undefined' && isVoiceRecording) window.stopVoiceRecording();
 
+    updateLiveMuteButtonUI();
     startLiveListening();
 };
 
 window.stopLiveVoiceMode = function () {
     isLiveVoiceModeActive = false;
+    isLiveSpeaking = false;
+    liveSpeechQueue = [];
+
     const overlay = document.getElementById('live-voice-overlay');
     if (overlay) {
         overlay.classList.add('opacity-0');
@@ -1827,11 +1837,49 @@ window.stopLiveVoiceMode = function () {
         try { liveVoiceRecognition.stop(); } catch(e) {}
     }
     if (window.speechSynthesis) window.speechSynthesis.cancel();
-    if (liveVoiceAbortController) liveVoiceAbortController.abort();
+    if (liveVoiceAbortController) {
+        liveVoiceAbortController.abort();
+        liveVoiceAbortController = null;
+    }
     if (liveVoiceSilenceTimer) clearTimeout(liveVoiceSilenceTimer);
     
     updateLiveVoiceOrb('idle');
 };
+
+window.toggleLiveVoiceMute = function () {
+    if (!isLiveVoiceModeActive) return;
+    isLiveVoiceMuted = !isLiveVoiceMuted;
+    updateLiveMuteButtonUI();
+
+    if (isLiveVoiceMuted) {
+        if (liveVoiceRecognition) {
+            try { liveVoiceRecognition.stop(); } catch(e) {}
+        }
+        if (liveVoiceSilenceTimer) clearTimeout(liveVoiceSilenceTimer);
+        updateLiveVoiceOrb('muted');
+    } else {
+        if (!isLiveSpeaking) {
+            startLiveListening();
+        }
+    }
+};
+
+function updateLiveMuteButtonUI() {
+    const muteBtn = document.getElementById('live-mute-btn');
+    const muteIcon = document.getElementById('live-mute-icon');
+    if (!muteBtn) return;
+
+    if (isLiveVoiceMuted) {
+        muteBtn.className = 'w-14 h-14 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 flex flex-col items-center justify-center text-amber-400 transition-all shadow-lg backdrop-blur-md ring-2 ring-amber-500/40';
+        muteBtn.innerHTML = `<i data-lucide="mic-off" class="w-5 h-5 text-amber-400"></i>`;
+        muteBtn.title = "إلغاء الكتم (تفعيل الميكروفون)";
+    } else {
+        muteBtn.className = 'w-14 h-14 rounded-full bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 flex flex-col items-center justify-center text-slate-300 hover:text-white transition-all shadow-lg backdrop-blur-md';
+        muteBtn.innerHTML = `<i data-lucide="mic" class="w-5 h-5"></i>`;
+        muteBtn.title = "كتم الصوت";
+    }
+    if (window.lucide) lucide.createIcons();
+}
 
 function updateLiveVoiceOrb(state) {
     const orb = document.getElementById('live-voice-orb');
@@ -1840,30 +1888,45 @@ function updateLiveVoiceOrb(state) {
     
     if (!orb || !statusText) return;
     
-    orb.className = 'w-40 h-40 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300';
+    orb.className = 'w-44 h-44 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 cursor-pointer';
     
     if (state === 'listening') {
         orb.classList.add('orb-listening');
         statusText.textContent = typeof t === 'function' ? t('chat.liveModeListening') : 'جاري الاستماع... (تحدث الآن)';
-        if (transcriptEl && !transcriptEl.textContent) transcriptEl.textContent = '';
+        statusText.className = 'text-sky-300 text-sm font-medium tracking-wide animate-pulse';
     } else if (state === 'thinking') {
         orb.classList.add('orb-idle');
-        statusText.textContent = typeof t === 'function' ? t('chat.loading') : 'جاري التفكير...';
+        statusText.textContent = typeof t === 'function' ? t('chat.loading') : 'جاري التفكير والتوليد الفوري...';
+        statusText.className = 'text-amber-300 text-sm font-medium tracking-wide animate-pulse';
+        if (transcriptEl) transcriptEl.textContent = '⚡ جاري استقبال الرد...';
     } else if (state === 'speaking') {
         orb.classList.add('orb-speaking');
-        statusText.textContent = typeof t === 'function' ? t('chat.liveModeSpeaking') : 'يتحدث الآن...';
+        statusText.textContent = typeof t === 'function' ? t('chat.liveModeSpeaking') : 'المساعد يتحدث معك الآن...';
+        statusText.className = 'text-emerald-300 text-sm font-medium tracking-wide animate-pulse';
+    } else if (state === 'muted') {
+        orb.classList.add('orb-idle');
+        statusText.textContent = 'الميكروفون مكتوم (اضغط لإلغاء الكتم)';
+        statusText.className = 'text-amber-400 text-sm font-medium tracking-wide';
+        if (transcriptEl) transcriptEl.textContent = '🔇 تم كتم الميكروفون';
     } else {
         orb.classList.add('orb-idle');
         statusText.textContent = typeof t === 'function' ? t('chat.liveModeTitle') : 'وضع المحادثة الحية';
+        statusText.className = 'text-slate-300 text-sm font-medium tracking-wide';
         if (transcriptEl) transcriptEl.textContent = '';
     }
 }
 
 function startLiveListening() {
-    if (!isLiveVoiceModeActive) return;
+    if (!isLiveVoiceModeActive || isLiveVoiceMuted || isLiveSpeaking) return;
     updateLiveVoiceOrb('listening');
     
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    if (liveVoiceRecognition) {
+        try { liveVoiceRecognition.abort(); } catch(e) {}
+    }
+
     liveVoiceRecognition = new SpeechRecognition();
     liveVoiceRecognition.continuous = true;
     liveVoiceRecognition.interimResults = true;
@@ -1873,10 +1936,11 @@ function startLiveListening() {
     liveVoiceRecognition.lang = langMap[currentLang] || 'ar-SA';
     
     const transcriptEl = document.getElementById('live-voice-transcript');
-    let finalTranscript = '';
+    let capturedText = '';
     
     liveVoiceRecognition.onresult = (event) => {
         let interimTranscript = '';
+        let finalTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
             if (event.results[i].isFinal) {
                 finalTranscript += event.results[i][0].transcript + ' ';
@@ -1885,39 +1949,43 @@ function startLiveListening() {
             }
         }
         
-        const displayText = finalTranscript + interimTranscript;
-        if (transcriptEl) transcriptEl.textContent = displayText;
+        capturedText = (finalTranscript + interimTranscript).trim();
+        if (transcriptEl && capturedText) {
+            transcriptEl.textContent = capturedText;
+        }
         
-        // Auto-submit after silence
         if (liveVoiceSilenceTimer) clearTimeout(liveVoiceSilenceTimer);
         
-        if (displayText.trim().length > 0) {
+        if (capturedText.length > 0) {
             liveVoiceSilenceTimer = setTimeout(() => {
-                if (isLiveVoiceModeActive) {
+                if (isLiveVoiceModeActive && !isLiveVoiceMuted && !isLiveSpeaking) {
                     try { liveVoiceRecognition.stop(); } catch(e) {}
-                    processLiveVoiceQuery(finalTranscript + interimTranscript);
+                    processLiveVoiceQuery(capturedText);
                 }
-            }, 1000); // 1 second of silence triggers immediate send
+            }, 1000); // 1.0 ثانية صمت كافية لسرعة الرد
         }
     };
     
     liveVoiceRecognition.onerror = (event) => {
-        if (event.error !== 'no-speech') {
-            console.warn('Live Voice Error:', event.error);
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+            console.warn('Live Voice Recognition Error:', event.error);
         }
     };
     
     liveVoiceRecognition.onend = () => {
-        // If we stopped but didn't trigger process, and still active, restart
-        if (isLiveVoiceModeActive && (!finalTranscript || finalTranscript.trim() === '')) {
-            setTimeout(startLiveListening, 100);
+        if (isLiveVoiceModeActive && !isLiveVoiceMuted && !isLiveSpeaking && (!capturedText || capturedText.trim() === '')) {
+            setTimeout(() => {
+                if (isLiveVoiceModeActive && !isLiveVoiceMuted && !isLiveSpeaking) {
+                    startLiveListening();
+                }
+            }, 150);
         }
     };
     
     try {
         liveVoiceRecognition.start();
     } catch (e) {
-        console.error(e);
+        console.error("Live recognition start error:", e);
     }
 }
 
@@ -1932,109 +2000,222 @@ async function processLiveVoiceQuery(text) {
     
     updateLiveVoiceOrb('thinking');
     
-    // Add to UI
+    // إضافة الرسالة لسجل المحادثة
     appendMessageUI(query, 'user');
     currentChatHistory.push({ role: "user", content: query });
     saveCurrentChat();
     
-    if (liveVoiceAbortController) liveVoiceAbortController.abort();
+    if (liveVoiceAbortController) {
+        liveVoiceAbortController.abort();
+    }
     liveVoiceAbortController = new AbortController();
     
-    const recentHistory = currentChatHistory.slice(-6).map(msg => ({ role: msg.role, content: msg.content }));
+    // إيقاف أي مؤقتات سابقة
+    const timeoutId = setTimeout(() => {
+        if (liveVoiceAbortController) {
+            console.warn("Live voice timeout reached, aborting request");
+            liveVoiceAbortController.abort();
+        }
+    }, 15000); // 15 ثانية حد أقصى
+    
+    const recentHistory = currentChatHistory.slice(-8).map(msg => ({ role: msg.role, content: msg.content }));
+    const voiceDirectives = "توجيه إلزامي لأسلوب المحادثة الصوتية الحية: أنت الآن في مكالمة صوتية فورية مع المستخدم. تحدث بجمل واضحة وقصيرة وسلسة ولبقة كصديق ومستشار صوتي، وافتتح الرد مباشرة بنبرة لطيفة ومباشرة. تجنب تماماً أي علامات Markdown معقدة أو جداول أو رموز يصعب نطقها.";
+    
     const messagesPayload = [
-        { role: "system", content: typeof buildSystemPrompt === 'function' ? buildSystemPrompt() + "\n\nتوجيه النمط: أجب باختصار شديد ومباشر وبأسلوب حواري عفوي وكأنك في مكالمة هاتفية حية، لا تستخدم تنسيقات معقدة مثل الجداول أو القوائم، استخدم نصاً بسيطاً ومباشراً يمكن قراءته صوتياً بسلاسة." : "أجب باختصار شديد ومباشر وبأسلوب حواري عفوي وكأنك في مكالمة هاتفية حية." },
+        { role: "system", content: `${typeof buildSystemPrompt === 'function' ? buildSystemPrompt() : SYSTEM_INSTRUCTION}\n\n${voiceDirectives}` },
         ...recentHistory
     ];
     
+    liveSpeechQueue = [];
+    isLiveSpeaking = false;
+    let fullAccumulatedText = '';
+    let sentenceBuffer = '';
+
     try {
-        // نستخدم stream: false هنا لسرعة الحصول على الرد الكامل للمكالمة، لأننا نحتاج الرد كاملا لننطقه
         const response = await fetch(WORKER_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: "deepseek-chat",
                 messages: messagesPayload,
-                stream: false 
+                stream: true
             }),
             signal: liveVoiceAbortController.signal
         });
         
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        
-        const data = await response.json();
-        const botResponse = data.choices[0].message.content;
-        
-        appendMessageUI(botResponse, 'bot');
-        currentChatHistory.push({ role: "assistant", content: botResponse });
-        saveCurrentChat();
-        try { await saveChatSession(); } catch(e){}
-        
-        if (!isLiveVoiceModeActive) return;
-        
-        // Speak it
-        speakLiveVoiceResponse(botResponse);
-        
-    } catch (error) {
-        if (error.name !== 'AbortError' && isLiveVoiceModeActive) {
-            speakLiveVoiceResponse(typeof t === 'function' ? t('chat.errorConnection') : 'عذراً، حدث خطأ في الاتصال.');
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
         }
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let sseBuffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            sseBuffer += decoder.decode(value, { stream: true });
+            const lines = sseBuffer.split('\n');
+            sseBuffer = lines.pop() || '';
+            
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed.startsWith('data: ')) continue;
+                const payload = trimmed.slice(6).trim();
+                if (payload === '[DONE]') continue;
+                
+                try {
+                    const chunk = JSON.parse(payload);
+                    const delta = chunk?.choices?.[0]?.delta?.content;
+                    if (delta) {
+                        fullAccumulatedText += delta;
+                        sentenceBuffer += delta;
+                        
+                        // تقسيم النص إلى جمل عند علامات الترقيم لنطق أول جملة فوراً
+                        const sentenceEndMatch = sentenceBuffer.match(/([^\n.?!؟،]+[.?!؟،\n]+)/);
+                        if (sentenceEndMatch) {
+                            const sentenceToSpeak = sentenceEndMatch[1].trim();
+                            sentenceBuffer = sentenceBuffer.substring(sentenceEndMatch.index + sentenceEndMatch[0].length);
+                            if (sentenceToSpeak.length > 2) {
+                                enqueueLiveSpeechSentence(sentenceToSpeak);
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+
+        // نطق ما تبقى في الـ buffer إن وجد
+        if (sentenceBuffer.trim().length > 0) {
+            enqueueLiveSpeechSentence(sentenceBuffer.trim());
+        }
+
+        // إذا لم تكن هناك أي جمل تم استخراجها ولكن هناك نص كامل
+        if (liveSpeechQueue.length === 0 && !isLiveSpeaking && fullAccumulatedText.trim()) {
+            enqueueLiveSpeechSentence(fullAccumulatedText.trim());
+        }
+
+        // حفظ الرد في السجل وعرضه
+        if (fullAccumulatedText.trim()) {
+            appendMessageUI(fullAccumulatedText, 'bot');
+            currentChatHistory.push({ role: "assistant", content: fullAccumulatedText });
+            saveCurrentChat();
+            try { await saveChatSession(); } catch(e){}
+        }
+
+    } catch (error) {
+        clearTimeout(timeoutId);
+        console.error('Live voice error:', error);
+        if (isLiveVoiceModeActive) {
+            const errMsg = error.name === 'AbortError' ? 'عذراً، الخادم تأخر في الرد، يرجى المحاولة مرة أخرى.' : (typeof t === 'function' ? t('chat.errorConnection') : 'عذراً، حدث خطأ في الاتصال.');
+            enqueueLiveSpeechSentence(errMsg);
+        }
+    } finally {
+        liveVoiceAbortController = null;
     }
 }
 
-function speakLiveVoiceResponse(text) {
-    if (!isLiveVoiceModeActive) return;
-    updateLiveVoiceOrb('speaking');
+function enqueueLiveSpeechSentence(sentence) {
+    if (!sentence || !isLiveVoiceModeActive) return;
     
-    const transcriptEl = document.getElementById('live-voice-transcript');
-    
-    // Clean text for speaking
-    let cleanText = text.replace(/\[خيار:\s*.*?\]/g, '')
+    let clean = sentence
+        .replace(/\[خيار:\s*.*?\]/g, '')
         .replace(/\[.*?\]\(.*?\)/g, '')
         .replace(/[#*`_~]/g, '')
+        .replace(/[\n\r]+/g, ' ')
         .trim();
         
-    // الصوت فقط بدلاً من عرض النص في وضع المحادثة الصوتية الحية
-    if (transcriptEl) transcriptEl.textContent = '🔊 المساعد يتحدث معك الآن...';
-    
-    if (!window.speechSynthesis) {
-        setTimeout(startLiveListening, 2000);
+    if (!clean) return;
+
+    liveSpeechQueue.push(clean);
+    if (!isLiveSpeaking) {
+        playNextInLiveSpeechQueue();
+    }
+}
+
+function playNextInLiveSpeechQueue() {
+    if (!isLiveVoiceModeActive) {
+        liveSpeechQueue = [];
+        isLiveSpeaking = false;
         return;
     }
-    
-    const utterance = new SpeechSynthesisUtterance(cleanText);
+
+    if (liveSpeechQueue.length === 0) {
+        isLiveSpeaking = false;
+        const transcriptEl = document.getElementById('live-voice-transcript');
+        if (transcriptEl) transcriptEl.textContent = '✨ جاهز للاستماع إليك';
+        if (!isLiveVoiceMuted) {
+            setTimeout(() => {
+                if (isLiveVoiceModeActive && !isLiveVoiceMuted && !isLiveSpeaking) {
+                    startLiveListening();
+                }
+            }, 300);
+        } else {
+            updateLiveVoiceOrb('muted');
+        }
+        return;
+    }
+
+    isLiveSpeaking = true;
+    updateLiveVoiceOrb('speaking');
+
+    const nextSentence = liveSpeechQueue.shift();
+    const transcriptEl = document.getElementById('live-voice-transcript');
+    if (transcriptEl) {
+        transcriptEl.textContent = nextSentence;
+    }
+
+    if (!('speechSynthesis' in window)) {
+        setTimeout(playNextInLiveSpeechQueue, 1500);
+        return;
+    }
+
+    // إيقاف أي قراءة قديمة لضمان عدم حدوث تجميد في المتصفح
+    try { window.speechSynthesis.cancel(); } catch(e){}
+
+    const utterance = new SpeechSynthesisUtterance(nextSentence);
     const currentLang = typeof window.getCurrentLang === 'function' ? window.getCurrentLang() : 'ar';
     const langMap = { ar: 'ar-SA', en: 'en-US', fr: 'fr-FR', tr: 'tr-TR', ur: 'ur-PK', id: 'id-ID' };
     utterance.lang = langMap[currentLang] || 'ar-SA';
     utterance.rate = 1.05;
-    
-    // إجبار الأصوات على التحميل مسبقاً إذا لزم
-    let voices = window.speechSynthesis.getVoices();
-    const trySetVoiceAndSpeak = () => {
-        voices = window.speechSynthesis.getVoices();
-        const matchedVoice = voices.find(v => v.lang.startsWith(langMap[currentLang] ? langMap[currentLang].slice(0, 2) : 'ar'));
-        if (matchedVoice) utterance.voice = matchedVoice;
-        
-        utterance.onend = () => {
-            if (isLiveVoiceModeActive) {
-                setTimeout(startLiveListening, 500);
-            }
-        };
-        
-        utterance.onerror = () => {
-            if (isLiveVoiceModeActive) {
-                setTimeout(startLiveListening, 500);
-            }
-        };
-        
-        window.speechSynthesis.speak(utterance);
+    utterance.pitch = 1.0;
+
+    const voices = window.speechSynthesis.getVoices();
+    const matchedVoice = voices.find(v => v.lang.startsWith(langMap[currentLang] ? langMap[currentLang].slice(0, 2) : 'ar'));
+    if (matchedVoice) {
+        utterance.voice = matchedVoice;
+    }
+
+    let hasEnded = false;
+    const safeEnd = () => {
+        if (hasEnded) return;
+        hasEnded = true;
+        playNextInLiveSpeechQueue();
     };
-    
-    if (voices.length === 0) {
-        window.speechSynthesis.onvoiceschanged = () => {
-            trySetVoiceAndSpeak();
-        };
-    } else {
-        trySetVoiceAndSpeak();
+
+    utterance.onend = safeEnd;
+    utterance.onerror = (err) => {
+        console.warn('Speech synthesis utterance error:', err);
+        safeEnd();
+    };
+
+    // حماية إضافية في حال علقت دالة speechSynthesis في المتصفح
+    const maxDuration = Math.max(3000, nextSentence.length * 150);
+    setTimeout(() => {
+        if (!hasEnded && isLiveSpeaking) {
+            console.warn("Force releasing TTS utterance");
+            safeEnd();
+        }
+    }, maxDuration);
+
+    try {
+        window.speechSynthesis.speak(utterance);
+    } catch(e) {
+        console.error("speechSynthesis speak error:", e);
+        safeEnd();
     }
 }
 

@@ -202,10 +202,10 @@ ar: {
     "chat.voiceNotSupported": "عذراً، متصفحك لا يدعم التعرف على الصوت.",
     "chat.voiceError": "حدث خطأ في التقاط الصوت: ",
     "chat.imageTooLarge": "حجم الصورة كبير جداً، يرجى اختيار صورة أصغر من 10 ميجابايت.",
-    "chat.readAloud": "استماع للرد",
-    "chat.stopReading": "إيقاف القراءة الصوتية",
-    "chat.imageAttached": "صورة مرفقة",
-
+    "chat.liveModeTitle": "وضع المحادثة الحية",
+    "chat.liveModeListening": "جاري الاستماع... (تحدّث الآن)",
+    "chat.liveModeSpeaking": "المساعد يتحدث معك الآن...",
+    "header.liveMode": "مكالمة",
 },
 
 /* ═══════════════ English (en) ═══════════════ */
