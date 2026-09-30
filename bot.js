@@ -301,36 +301,43 @@ window.stopVoiceRecording = function () {
     if (window.lucide) lucide.createIcons();
 };
 
-// 🔊 دوال قراءة الرد صوتياً باللغة العربية حصراً وبصوت رجالي وقور (Arabic Male Voice TTS)
-window.speakMessageText = function (msgId, btn) {
-    if (!('speechSynthesis' in window)) {
-        alert('عذراً، متصفحك لا يدعم القراءة الصوتية (Text-to-Speech).');
-        return;
-    }
+// 🔊 دوال قراءة الرد صوتياً باللغة العربية الفصحى بصوت رجالي طبيعي متقن
+let globalAudioElement = null;
 
-    if (window.speechSynthesis.speaking && currentSpeakingMsgId === msgId) {
-        window.speechSynthesis.cancel();
+window.speakMessageText = function (msgId, btn) {
+    // 1. إذا كان الصوت يعمل بالفعل لنفس الرسالة -> إيقاف
+    if (currentSpeakingMsgId === msgId) {
+        if (globalAudioElement) {
+            globalAudioElement.pause();
+            globalAudioElement = null;
+        }
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
         window.resetTTSButtons();
         currentSpeakingMsgId = null;
         return;
     }
 
-    window.speechSynthesis.cancel();
+    // إيقاف أي قراءة صوتية سابقة
+    if (globalAudioElement) {
+        globalAudioElement.pause();
+        globalAudioElement = null;
+    }
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
     window.resetTTSButtons();
 
     const msgEl = document.getElementById(msgId);
-    let textToSpeak = '';
+    let rawText = '';
     if (msgEl) {
-        textToSpeak = msgEl.getAttribute('data-raw-text') || '';
-        if (!textToSpeak) {
+        rawText = msgEl.getAttribute('data-raw-text') || '';
+        if (!rawText) {
             const proseEl = msgEl.querySelector('.prose-chat');
-            if (proseEl) textToSpeak = proseEl.innerText || proseEl.textContent || '';
+            if (proseEl) rawText = proseEl.innerText || proseEl.textContent || '';
         }
     }
-    if (!textToSpeak) return;
+    if (!rawText) return;
 
-    // تنظيف النصوص وعلامات الترقيم والرموز الخاصة مع إبقاء النصوص والأحاديث والآيات العربية نقية
-    textToSpeak = textToSpeak
+    // تنظيف النصوص وعلامات الترقيم والرموز الخاصة
+    let textToSpeak = rawText
         .replace(/\[خيار:\s*.*?\]/g, '')
         .replace(/\[.*?\]\(.*?\)/g, '')
         .replace(/```[\s\S]*?```/g, '')
@@ -342,23 +349,6 @@ window.speakMessageText = function (msgId, btn) {
 
     if (!textToSpeak) return;
 
-    const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utterance.lang = 'ar-SA';
-    utterance.rate = 0.92;
-    utterance.pitch = 0.85;
-
-    // اختيار صوت عربي رجالي وقور
-    const voices = window.speechSynthesis.getVoices();
-    const arabicVoice = voices.find(v => {
-        const l = (v.lang || '').toLowerCase();
-        const n = (v.name || '').toLowerCase();
-        return l.startsWith('ar') || n.includes('arabic') || n.includes('maged') || n.includes('naayf') || n.includes('tariq') || n.includes('shakir') || n.includes('hamed');
-    });
-    if (arabicVoice) {
-        utterance.voice = arabicVoice;
-        utterance.lang = arabicVoice.lang;
-    }
-
     currentSpeakingMsgId = msgId;
     if (btn) {
         btn.innerHTML = `<i data-lucide="square" class="w-3.5 h-3.5 fill-current"></i> <span>إيقاف</span>`;
@@ -366,17 +356,72 @@ window.speakMessageText = function (msgId, btn) {
         if (window.lucide) lucide.createIcons();
     }
 
-    utterance.onend = function () {
-        window.resetTTSButtons();
-        currentSpeakingMsgId = null;
+    // دالة التراجع لاستخدام Web Speech Synthesis كخيار بديل في حال تعذر الصوت السحابي
+    const fallbackToBrowserTTS = () => {
+        if (!('speechSynthesis' in window)) {
+            window.resetTTSButtons();
+            currentSpeakingMsgId = null;
+            return;
+        }
+        const utterance = new SpeechSynthesisUtterance(textToSpeak);
+        utterance.lang = 'ar-SA';
+        utterance.rate = 0.90;
+        utterance.pitch = 0.80; // نبرة صوت رجالية عميقة
+
+        const voices = window.speechSynthesis.getVoices();
+        // تفضيل الأصوات الرجالية العربية الواضحة في المتصفح
+        const maleVoice = voices.find(v => {
+            const n = (v.name || '').toLowerCase();
+            const l = (v.lang || '').toLowerCase();
+            return (l.startsWith('ar') || n.includes('arabic')) && 
+                   (n.includes('maged') || n.includes('naayf') || n.includes('shakir') || n.includes('tariq') || n.includes('male') || n.includes('hamed') || n.includes('david'));
+        }) || voices.find(v => (v.lang || '').toLowerCase().startsWith('ar'));
+
+        if (maleVoice) {
+            utterance.voice = maleVoice;
+            utterance.lang = maleVoice.lang;
+        }
+
+        utterance.onend = () => {
+            window.resetTTSButtons();
+            currentSpeakingMsgId = null;
+        };
+        utterance.onerror = () => {
+            window.resetTTSButtons();
+            currentSpeakingMsgId = null;
+        };
+        window.speechSynthesis.speak(utterance);
     };
 
-    utterance.onerror = function () {
-        window.resetTTSButtons();
-        currentSpeakingMsgId = null;
-    };
+    // 🌟 تشغيل الصوت العربي الطبيعي عبر خدمة TTS عالية الدقة ومجانية
+    try {
+        const encodedText = encodeURIComponent(textToSpeak.substring(0, 500)); // نطق الجزء المطلوب بفصاحة تامة
+        const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=ar&client=tw-ob`;
 
-    window.speechSynthesis.speak(utterance);
+        const audio = new Audio(ttsUrl);
+        globalAudioElement = audio;
+
+        audio.onended = () => {
+            window.resetTTSButtons();
+            currentSpeakingMsgId = null;
+            globalAudioElement = null;
+        };
+
+        audio.onerror = () => {
+            console.warn("Cloud Arabic TTS failed, switching to local voice...");
+            fallbackToBrowserTTS();
+        };
+
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(err => {
+                console.warn("Audio play blocked, using fallback:", err);
+                fallbackToBrowserTTS();
+            });
+        }
+    } catch(err) {
+        fallbackToBrowserTTS();
+    }
 };
 
 window.resetTTSButtons = function () {
