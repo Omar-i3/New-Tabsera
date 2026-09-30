@@ -2010,15 +2010,7 @@ async function processLiveVoiceQuery(text) {
     }
     liveVoiceAbortController = new AbortController();
     
-    // إيقاف أي مؤقتات سابقة
-    const timeoutId = setTimeout(() => {
-        if (liveVoiceAbortController) {
-            console.warn("Live voice timeout reached, aborting request");
-            liveVoiceAbortController.abort();
-        }
-    }, 15000); // 15 ثانية حد أقصى
-    
-    const recentHistory = currentChatHistory.slice(-8).map(msg => ({ role: msg.role, content: msg.content }));
+    const recentHistory = currentChatHistory.slice(-6).map(msg => ({ role: msg.role, content: msg.content }));
     const voiceDirectives = "توجيه إلزامي لأسلوب المحادثة الصوتية الحية: أنت الآن في مكالمة صوتية فورية مع المستخدم. تحدث بجمل واضحة وقصيرة وسلسة ولبقة كصديق ومستشار صوتي، وافتتح الرد مباشرة بنبرة لطيفة ومباشرة. تجنب تماماً أي علامات Markdown معقدة أو جداول أو رموز يصعب نطقها.";
     
     const messagesPayload = [
@@ -2029,7 +2021,6 @@ async function processLiveVoiceQuery(text) {
     liveSpeechQueue = [];
     isLiveSpeaking = false;
     let fullAccumulatedText = '';
-    let sentenceBuffer = '';
 
     try {
         const response = await fetch(WORKER_URL, {
@@ -2038,79 +2029,42 @@ async function processLiveVoiceQuery(text) {
             body: JSON.stringify({
                 model: "deepseek-chat",
                 messages: messagesPayload,
-                stream: true
+                stream: false
             }),
             signal: liveVoiceAbortController.signal
         });
         
-        clearTimeout(timeoutId);
-
         if (!response.ok) {
             throw new Error('HTTP ' + response.status);
         }
         
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let sseBuffer = '';
+        const data = await response.json();
+        const botResponse = data?.choices?.[0]?.message?.content || '';
+        
+        if (!botResponse) {
+            throw new Error('Empty response');
+        }
+        
+        fullAccumulatedText = botResponse;
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            
-            sseBuffer += decoder.decode(value, { stream: true });
-            const lines = sseBuffer.split('\n');
-            sseBuffer = lines.pop() || '';
-            
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed.startsWith('data: ')) continue;
-                const payload = trimmed.slice(6).trim();
-                if (payload === '[DONE]') continue;
-                
-                try {
-                    const chunk = JSON.parse(payload);
-                    const delta = chunk?.choices?.[0]?.delta?.content;
-                    if (delta) {
-                        fullAccumulatedText += delta;
-                        sentenceBuffer += delta;
-                        
-                        // تقسيم النص إلى جمل عند علامات الترقيم لنطق أول جملة فوراً
-                        const sentenceEndMatch = sentenceBuffer.match(/([^\n.?!؟،]+[.?!؟،\n]+)/);
-                        if (sentenceEndMatch) {
-                            const sentenceToSpeak = sentenceEndMatch[1].trim();
-                            sentenceBuffer = sentenceBuffer.substring(sentenceEndMatch.index + sentenceEndMatch[0].length);
-                            if (sentenceToSpeak.length > 2) {
-                                enqueueLiveSpeechSentence(sentenceToSpeak);
-                            }
-                        }
-                    }
-                } catch (_) {}
+        // تقسيم الرد لجمل وإضافتها للطابور
+        const sentences = botResponse.match(/[^.?!؟،\n]+[.?!؟،\n]*/g) || [botResponse];
+        sentences.forEach(s => {
+            if (s.trim().length > 0) {
+                enqueueLiveSpeechSentence(s.trim());
             }
-        }
-
-        // نطق ما تبقى في الـ buffer إن وجد
-        if (sentenceBuffer.trim().length > 0) {
-            enqueueLiveSpeechSentence(sentenceBuffer.trim());
-        }
-
-        // إذا لم تكن هناك أي جمل تم استخراجها ولكن هناك نص كامل
-        if (liveSpeechQueue.length === 0 && !isLiveSpeaking && fullAccumulatedText.trim()) {
-            enqueueLiveSpeechSentence(fullAccumulatedText.trim());
-        }
+        });
 
         // حفظ الرد في السجل وعرضه
-        if (fullAccumulatedText.trim()) {
-            appendMessageUI(fullAccumulatedText, 'bot');
-            currentChatHistory.push({ role: "assistant", content: fullAccumulatedText });
-            saveCurrentChat();
-            try { await saveChatSession(); } catch(e){}
-        }
+        appendMessageUI(fullAccumulatedText, 'bot');
+        currentChatHistory.push({ role: "assistant", content: fullAccumulatedText });
+        saveCurrentChat();
+        try { await saveChatSession(); } catch(e){}
 
     } catch (error) {
-        clearTimeout(timeoutId);
         console.error('Live voice error:', error);
-        if (isLiveVoiceModeActive) {
-            const errMsg = error.name === 'AbortError' ? 'عذراً، الخادم تأخر في الرد، يرجى المحاولة مرة أخرى.' : (typeof t === 'function' ? t('chat.errorConnection') : 'عذراً، حدث خطأ في الاتصال.');
+        if (isLiveVoiceModeActive && error.name !== 'AbortError') {
+            const errMsg = typeof t === 'function' ? t('chat.errorConnection') : 'عذراً، حدث خطأ في الاتصال بالخادم، يرجى المحاولة ثانية.';
             enqueueLiveSpeechSentence(errMsg);
         }
     } finally {
@@ -2173,9 +2127,6 @@ function playNextInLiveSpeechQueue() {
         return;
     }
 
-    // إيقاف أي قراءة قديمة لضمان عدم حدوث تجميد في المتصفح
-    try { window.speechSynthesis.cancel(); } catch(e){}
-
     const utterance = new SpeechSynthesisUtterance(nextSentence);
     const currentLang = typeof window.getCurrentLang === 'function' ? window.getCurrentLang() : 'ar';
     const langMap = { ar: 'ar-SA', en: 'en-US', fr: 'fr-FR', tr: 'tr-TR', ur: 'ur-PK', id: 'id-ID' };
@@ -2203,7 +2154,7 @@ function playNextInLiveSpeechQueue() {
     };
 
     // حماية إضافية في حال علقت دالة speechSynthesis في المتصفح
-    const maxDuration = Math.max(3000, nextSentence.length * 150);
+    const maxDuration = Math.max(2500, nextSentence.length * 150);
     setTimeout(() => {
         if (!hasEnded && isLiveSpeaking) {
             console.warn("Force releasing TTS utterance");
