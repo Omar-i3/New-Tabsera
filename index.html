@@ -35,10 +35,25 @@
     ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
-    /* تنسيق نصوص الردود (Markdown Prose) */
+    /* تنسيق نصوص الردود (Markdown Prose) وحماية الأبعاد */
+    .bot-msg-bubble {
+      max-width: 100%;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      word-break: break-word;
+    }
+    .user-msg-bubble {
+      max-width: 85%;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      word-break: break-word;
+    }
     .prose-chat {
       line-height: 1.8;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
       word-break: break-word;
+      max-width: 100%;
     }
     .prose-chat p {
       margin-bottom: 0.75rem;

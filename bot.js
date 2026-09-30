@@ -301,28 +301,21 @@ window.stopVoiceRecording = function () {
     if (window.lucide) lucide.createIcons();
 };
 
-// 🔊 دوال قراءة الرد صوتياً باللغة العربية الفصحى بصوت رجالي طبيعي متقن
-let globalAudioElement = null;
-
+// 🔊 دوال قراءة الرد صوتياً باللغة العربية حصراً مع تنظيف علامات التشكيل والرموز
 window.speakMessageText = function (msgId, btn) {
-    // 1. إذا كان الصوت يعمل بالفعل لنفس الرسالة -> إيقاف
-    if (currentSpeakingMsgId === msgId) {
-        if (globalAudioElement) {
-            globalAudioElement.pause();
-            globalAudioElement = null;
-        }
-        if (window.speechSynthesis) window.speechSynthesis.cancel();
+    if (!('speechSynthesis' in window)) {
+        alert('عذراً، متصفحك لا يدعم القراءة الصوتية (Text-to-Speech).');
+        return;
+    }
+
+    if (window.speechSynthesis.speaking && currentSpeakingMsgId === msgId) {
+        window.speechSynthesis.cancel();
         window.resetTTSButtons();
         currentSpeakingMsgId = null;
         return;
     }
 
-    // إيقاف أي قراءة صوتية سابقة
-    if (globalAudioElement) {
-        globalAudioElement.pause();
-        globalAudioElement = null;
-    }
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    window.speechSynthesis.cancel();
     window.resetTTSButtons();
 
     const msgEl = document.getElementById(msgId);
@@ -336,18 +329,39 @@ window.speakMessageText = function (msgId, btn) {
     }
     if (!rawText) return;
 
-    // تنظيف النصوص وعلامات الترقيم والرموز الخاصة
-    let textToSpeak = rawText
+    // تنظيف تام للنص العربي من كافة الرموز والتشكيل الزائد الذي يربك المتصفح
+    let cleanText = rawText
         .replace(/\[خيار:\s*.*?\]/g, '')
         .replace(/\[.*?\]\(.*?\)/g, '')
         .replace(/```[\s\S]*?```/g, '')
         .replace(/`([^`]+)`/g, '$1')
         .replace(/[*#_~]/g, '')
-        .replace(/[📜«»﴿﴾]/g, ' ')
+        .replace(/[📜«»﴿﴾\[\]{}|]/g, ' ')
         .replace(/<[^>]*>/g, '')
+        .replace(/[\u064B-\u065F\u0670]/g, '') // إزالة علامات التشكيل المرهقة لمحرك النطق
+        .replace(/\s+/g, ' ')
         .trim();
 
-    if (!textToSpeak) return;
+    if (!cleanText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'ar-SA';
+    utterance.rate = 0.90;
+    utterance.pitch = 0.75; // طبقة صوت رجالية منخفضة وواضحة جداً
+
+    const voices = window.speechSynthesis.getVoices();
+    const arabicVoices = voices.filter(v => (v.lang || '').toLowerCase().startsWith('ar') || (v.name || '').toLowerCase().includes('arabic'));
+    
+    // محاولة اختيار صوت رجالي أو أي صوت عربي معتمد
+    const chosenVoice = arabicVoices.find(v => {
+        const n = (v.name || '').toLowerCase();
+        return n.includes('male') || n.includes('maged') || n.includes('naayf') || n.includes('shakir') || n.includes('tariq') || n.includes('hamed') || n.includes('david');
+    }) || arabicVoices[0];
+
+    if (chosenVoice) {
+        utterance.voice = chosenVoice;
+        utterance.lang = chosenVoice.lang;
+    }
 
     currentSpeakingMsgId = msgId;
     if (btn) {
@@ -356,72 +370,17 @@ window.speakMessageText = function (msgId, btn) {
         if (window.lucide) lucide.createIcons();
     }
 
-    // دالة التراجع لاستخدام Web Speech Synthesis كخيار بديل في حال تعذر الصوت السحابي
-    const fallbackToBrowserTTS = () => {
-        if (!('speechSynthesis' in window)) {
-            window.resetTTSButtons();
-            currentSpeakingMsgId = null;
-            return;
-        }
-        const utterance = new SpeechSynthesisUtterance(textToSpeak);
-        utterance.lang = 'ar-SA';
-        utterance.rate = 0.90;
-        utterance.pitch = 0.80; // نبرة صوت رجالية عميقة
-
-        const voices = window.speechSynthesis.getVoices();
-        // تفضيل الأصوات الرجالية العربية الواضحة في المتصفح
-        const maleVoice = voices.find(v => {
-            const n = (v.name || '').toLowerCase();
-            const l = (v.lang || '').toLowerCase();
-            return (l.startsWith('ar') || n.includes('arabic')) && 
-                   (n.includes('maged') || n.includes('naayf') || n.includes('shakir') || n.includes('tariq') || n.includes('male') || n.includes('hamed') || n.includes('david'));
-        }) || voices.find(v => (v.lang || '').toLowerCase().startsWith('ar'));
-
-        if (maleVoice) {
-            utterance.voice = maleVoice;
-            utterance.lang = maleVoice.lang;
-        }
-
-        utterance.onend = () => {
-            window.resetTTSButtons();
-            currentSpeakingMsgId = null;
-        };
-        utterance.onerror = () => {
-            window.resetTTSButtons();
-            currentSpeakingMsgId = null;
-        };
-        window.speechSynthesis.speak(utterance);
+    utterance.onend = function () {
+        window.resetTTSButtons();
+        currentSpeakingMsgId = null;
     };
 
-    // 🌟 تشغيل الصوت العربي الطبيعي عبر خدمة TTS عالية الدقة ومجانية
-    try {
-        const encodedText = encodeURIComponent(textToSpeak.substring(0, 500)); // نطق الجزء المطلوب بفصاحة تامة
-        const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=ar&client=tw-ob`;
+    utterance.onerror = function () {
+        window.resetTTSButtons();
+        currentSpeakingMsgId = null;
+    };
 
-        const audio = new Audio(ttsUrl);
-        globalAudioElement = audio;
-
-        audio.onended = () => {
-            window.resetTTSButtons();
-            currentSpeakingMsgId = null;
-            globalAudioElement = null;
-        };
-
-        audio.onerror = () => {
-            console.warn("Cloud Arabic TTS failed, switching to local voice...");
-            fallbackToBrowserTTS();
-        };
-
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-            playPromise.catch(err => {
-                console.warn("Audio play blocked, using fallback:", err);
-                fallbackToBrowserTTS();
-            });
-        }
-    } catch(err) {
-        fallbackToBrowserTTS();
-    }
+    window.speechSynthesis.speak(utterance);
 };
 
 window.resetTTSButtons = function () {
