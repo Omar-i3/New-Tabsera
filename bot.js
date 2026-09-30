@@ -301,14 +301,13 @@ window.stopVoiceRecording = function () {
     if (window.lucide) lucide.createIcons();
 };
 
-// 🔊 دوال قراءة الرد صوتياً (Text-to-Speech Engine)
+// 🔊 دوال قراءة الرد صوتياً باللغة العربية حصراً وبصوت رجالي وقور (Arabic Male Voice TTS)
 window.speakMessageText = function (msgId, btn) {
     if (!('speechSynthesis' in window)) {
         alert('عذراً، متصفحك لا يدعم القراءة الصوتية (Text-to-Speech).');
         return;
     }
 
-    // إذا كانت هناك قراءة جارية بالفعل لنفس الرسالة، يتم إيقافها
     if (window.speechSynthesis.speaking && currentSpeakingMsgId === msgId) {
         window.speechSynthesis.cancel();
         window.resetTTSButtons();
@@ -316,44 +315,53 @@ window.speakMessageText = function (msgId, btn) {
         return;
     }
 
-    // إيقاف أي صوت سابق
     window.speechSynthesis.cancel();
     window.resetTTSButtons();
 
     const msgEl = document.getElementById(msgId);
-    let textToSpeak = msgEl ? msgEl.getAttribute('data-raw-text') : '';
+    let textToSpeak = '';
+    if (msgEl) {
+        textToSpeak = msgEl.getAttribute('data-raw-text') || '';
+        if (!textToSpeak) {
+            const proseEl = msgEl.querySelector('.prose-chat');
+            if (proseEl) textToSpeak = proseEl.innerText || proseEl.textContent || '';
+        }
+    }
     if (!textToSpeak) return;
 
-    // تنظيف النصوص من الرموز البرمجية وروابط الصور
+    // تنظيف النصوص وعلامات الترقيم والرموز الخاصة مع إبقاء النصوص والأحاديث والآيات العربية نقية
     textToSpeak = textToSpeak
         .replace(/\[خيار:\s*.*?\]/g, '')
         .replace(/\[.*?\]\(.*?\)/g, '')
-        .replace(/[#*`_~]/g, '')
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/[*#_~]/g, '')
+        .replace(/[📜«»﴿﴾]/g, ' ')
+        .replace(/<[^>]*>/g, '')
         .trim();
 
     if (!textToSpeak) return;
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     utterance.lang = 'ar-SA';
-    utterance.rate = 0.95;
+    utterance.rate = 0.92;
     utterance.pitch = 0.85;
 
-    // اختيار صوت عربي رجالي وقور ومناسب للفتوى
+    // اختيار صوت عربي رجالي وقور
     const voices = window.speechSynthesis.getVoices();
-    const arabicVoices = voices.filter(v => v.lang.startsWith('ar') || v.lang.includes('Arabic') || v.name.includes('Arabic') || v.name.includes('Saudi') || v.name.includes('Maged') || v.name.includes('Naayf') || v.name.includes('Tariq') || v.name.includes('Hamed') || v.name.includes('Shakir'));
-    
-    let selectedVoice = arabicVoices.find(v => {
-        const n = v.name.toLowerCase();
-        return n.includes('male') || n.includes('maged') || n.includes('naayf') || n.includes('tariq') || n.includes('hamed') || n.includes('shakir') || n.includes('david') || n.includes('george') || n.includes('natural');
-    }) || arabicVoices[0] || voices.find(v => v.lang.startsWith('ar'));
-
-    if (selectedVoice) {
-        utterance.voice = selectedVoice;
+    const arabicVoice = voices.find(v => {
+        const l = (v.lang || '').toLowerCase();
+        const n = (v.name || '').toLowerCase();
+        return l.startsWith('ar') || n.includes('arabic') || n.includes('maged') || n.includes('naayf') || n.includes('tariq') || n.includes('shakir') || n.includes('hamed');
+    });
+    if (arabicVoice) {
+        utterance.voice = arabicVoice;
+        utterance.lang = arabicVoice.lang;
     }
 
     currentSpeakingMsgId = msgId;
     if (btn) {
-        btn.innerHTML = `<i data-lucide="square" class="w-3.5 h-3.5 fill-current"></i> <span>${typeof t === 'function' ? t('chat.stopReading') : 'إيقاف'}</span>`;
+        btn.innerHTML = `<i data-lucide="square" class="w-3.5 h-3.5 fill-current"></i> <span>إيقاف</span>`;
         btn.classList.add('speaking-active', 'text-emerald-400');
         if (window.lucide) lucide.createIcons();
     }
